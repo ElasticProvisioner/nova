@@ -871,6 +871,67 @@ class HostTestCase(test.NoDBTestCase):
         self.assertEqual(unversioned_caps, versioned_caps)
         self.assertIs(unversioned_caps, versioned_caps)
 
+    def test_get_domain_capabilities_without_vtpm(self):
+        caps = self._test_get_domain_capabilities()
+        self.assertEqual(vconfig.LibvirtConfigDomainCaps, type(caps))
+        self.assertIsNone(caps.devices.tpm)
+
+    @mock.patch.object(
+        fakelibvirt.virConnect, '_domain_capability_devices', new=
+        fakelibvirt.virConnect._domain_capability_devices_with_tpm_supported
+    )
+    def test_get_domain_capabilities_with_vtpm_supported(self):
+        caps = self._test_get_domain_capabilities()
+        self.assertEqual(vconfig.LibvirtConfigDomainCaps, type(caps))
+        self.assertEqual(vconfig.LibvirtConfigDomainCapsTpm,
+                         type(caps.devices.tpm))
+        self.assertTrue(caps.devices.tpm.supported)
+        self.assertEqual(
+            ['tpm-tis', 'tpm-crb'],
+            caps.devices.tpm.models
+        )
+        self.assertEqual(
+            ['passthrough', 'emulator', 'external'],
+            caps.devices.tpm.backend_models
+        )
+        self.assertIsNone(caps.devices.tpm.backend_versions)
+
+    @mock.patch.object(
+        fakelibvirt.virConnect, '_domain_capability_devices', new=
+        fakelibvirt.virConnect._domain_capability_devices_with_tpm_unsupported
+    )
+    def test_get_domain_capabilities_with_vtpm_unsupported(self):
+        caps = self._test_get_domain_capabilities()
+        self.assertEqual(vconfig.LibvirtConfigDomainCaps, type(caps))
+        self.assertEqual(vconfig.LibvirtConfigDomainCapsTpm,
+                         type(caps.devices.tpm))
+        self.assertFalse(caps.devices.tpm.supported)
+        self.assertEqual([], caps.devices.tpm.backend_models)
+        self.assertIsNone(caps.devices.tpm.backend_versions)
+
+    @mock.patch.object(
+        fakelibvirt.virConnect, '_domain_capability_devices', new=
+        fakelibvirt.virConnect._domain_capability_devices_with_tpm_versions
+    )
+    def test_get_domain_capabilities_with_vtpm_supported_and_versions(self):
+        caps = self._test_get_domain_capabilities()
+        self.assertEqual(vconfig.LibvirtConfigDomainCaps, type(caps))
+        self.assertEqual(vconfig.LibvirtConfigDomainCapsTpm,
+                         type(caps.devices.tpm))
+        self.assertTrue(caps.devices.tpm.supported)
+        self.assertEqual(
+            ['tpm-tis', 'tpm-crb'],
+            caps.devices.tpm.models
+        )
+        self.assertEqual(
+            ['passthrough', 'emulator', 'external'],
+            caps.devices.tpm.backend_models
+        )
+        self.assertEqual(
+            ['2.0'],
+            caps.devices.tpm.backend_versions
+        )
+
     @mock.patch.object(fakelibvirt.virConnect, '_domain_capability_features',
                        new='')
     def test_get_domain_capabilities_no_features(self):
@@ -1167,6 +1228,18 @@ Active:          8381604 kB
     def test_device_lookup_by_name(self, mock_nodeDeviceLookupByName):
         self.host.device_lookup_by_name("foo")
         mock_nodeDeviceLookupByName.assert_called_once_with("foo")
+
+    @mock.patch.object(fakelibvirt.virConnect, 'nodeDeviceCreateXML')
+    def test_device_create(self, mock_create):
+        node_dev = vconfig.LibvirtConfigNodeDevice()
+        self.host.device_create(node_dev)
+        mock_create.assert_called_once_with(node_dev.to_xml(), flags=0)
+
+    @mock.patch.object(fakelibvirt.virConnect, 'nodeDeviceDefineXML')
+    def test_device_define(self, mock_define):
+        node_dev = vconfig.LibvirtConfigNodeDevice()
+        self.host.device_define(node_dev)
+        mock_define.assert_called_once_with(node_dev.to_xml(), flags=0)
 
     def test_get_pcinet_info(self):
         dev_name = "net_enp2s2_02_9a_a1_37_be_54"
