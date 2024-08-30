@@ -895,6 +895,16 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         )
         mock_supports.assert_called_once_with()
 
+    @mock.patch.object(hardware, 'get_cpu_dedicated_set',
+                       return_value=set([0, 42, 1337]))
+    @mock.patch.object(libvirt_driver.LibvirtDriver,
+                       '_register_all_undefined_instance_details')
+    def test_init_host_topology(self, mock_get_cpu_dedicated_set, _):
+        driver = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), False)
+        with mock.patch.object(driver.cpu_api, 'power_up') as mock_power_up:
+            driver.init_host('goat')
+            mock_power_up.assert_called_with(set([0, 42, 1337]))
+
     @mock.patch.object(
         libvirt_driver.LibvirtDriver,
         '_register_all_undefined_instance_details',
@@ -5897,6 +5907,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         self.assertIsNone(cfg.devices[3].zlib_compression)
         self.assertIsNone(cfg.devices[3].playback_compression)
         self.assertIsNone(cfg.devices[3].streaming_mode)
+        self.assertFalse(cfg.devices[3].secure)
 
     def test_get_guest_config_with_vnc_and_tablet(self):
         self.flags(enabled=True, group='vnc')
@@ -5932,6 +5943,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         self.assertIsNone(cfg.devices[3].zlib_compression)
         self.assertIsNone(cfg.devices[3].playback_compression)
         self.assertIsNone(cfg.devices[3].streaming_mode)
+        self.assertFalse(cfg.devices[3].secure)
         self.assertEqual(cfg.devices[5].type, 'tablet')
 
     def test_get_guest_config_with_spice_and_tablet(self):
@@ -5973,6 +5985,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         self.assertIsNone(cfg.devices[3].zlib_compression)
         self.assertIsNone(cfg.devices[3].playback_compression)
         self.assertIsNone(cfg.devices[3].streaming_mode)
+        self.assertFalse(cfg.devices[3].secure)
         self.assertEqual(cfg.devices[5].type, 'tablet')
 
     @mock.patch.object(host.Host, "_check_machine_type", new=mock.Mock())
@@ -6037,6 +6050,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
             self.assertIsNone(cfg.devices[4].zlib_compression)
             self.assertIsNone(cfg.devices[4].playback_compression)
             self.assertIsNone(cfg.devices[4].streaming_mode)
+            self.assertFalse(cfg.devices[4].secure)
             self.assertEqual(cfg.devices[5].type, video_type)
 
     def test_get_guest_config_with_spice_compression(self):
@@ -6082,6 +6096,43 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         self.assertEqual(cfg.devices[3].zlib_compression, 'always')
         self.assertFalse(cfg.devices[3].playback_compression)
         self.assertEqual(cfg.devices[3].streaming_mode, 'all')
+        self.assertFalse(cfg.devices[3].secure)
+
+    def test_get_guest_config_with_spice_secure(self):
+        self.flags(enabled=False, group='vnc')
+        self.flags(virt_type='kvm', group='libvirt')
+        self.flags(enabled=True,
+                   agent_enabled=False,
+                   require_secure=True,
+                   server_listen='10.0.0.1',
+                   group='spice')
+        self.flags(pointer_model='usbtablet')
+
+        cfg = self._get_guest_config_with_graphics()
+
+        self.assertEqual(len(cfg.devices), 9)
+        self.assertIsInstance(cfg.devices[0],
+                              vconfig.LibvirtConfigGuestDisk)
+        self.assertIsInstance(cfg.devices[1],
+                              vconfig.LibvirtConfigGuestDisk)
+        self.assertIsInstance(cfg.devices[2],
+                              vconfig.LibvirtConfigGuestSerial)
+        self.assertIsInstance(cfg.devices[3],
+                              vconfig.LibvirtConfigGuestGraphics)
+        self.assertIsInstance(cfg.devices[4],
+                              vconfig.LibvirtConfigGuestVideo)
+        self.assertIsInstance(cfg.devices[5],
+                              vconfig.LibvirtConfigGuestInput)
+        self.assertIsInstance(cfg.devices[6],
+                              vconfig.LibvirtConfigGuestRng)
+        self.assertIsInstance(cfg.devices[7],
+                              vconfig.LibvirtConfigGuestUSBHostController)
+        self.assertIsInstance(cfg.devices[8],
+                              vconfig.LibvirtConfigMemoryBalloon)
+
+        self.assertEqual(cfg.devices[3].type, 'spice')
+        self.assertEqual(cfg.devices[3].listen, '10.0.0.1')
+        self.assertTrue(cfg.devices[3].secure)
 
     @mock.patch.object(host.Host, 'get_guest')
     @mock.patch.object(libvirt_driver.LibvirtDriver,
@@ -14920,7 +14971,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
                                             '/fake/instance/dir', disk_info)
         self.assertFalse(mock_fetch_image.called)
 
-    @mock.patch('nova.image.format_inspector.detect_file_format')
+    @mock.patch('oslo_utils.imageutils.format_inspector.detect_file_format')
     @mock.patch('nova.privsep.path.utime')
     @mock.patch('nova.virt.libvirt.utils.create_image')
     def test_create_images_and_backing_ephemeral_gets_created(
@@ -16664,7 +16715,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         fake_mkfs.assert_has_calls([mock.call('ext4', '/dev/something',
                                               'myVol')])
 
-    @mock.patch('nova.image.format_inspector.detect_file_format')
+    @mock.patch('oslo_utils.imageutils.format_inspector.detect_file_format')
     @mock.patch('nova.privsep.path.utime')
     @mock.patch('nova.virt.libvirt.utils.fetch_image')
     @mock.patch('nova.virt.libvirt.utils.create_image')
@@ -21900,6 +21951,13 @@ class LibvirtConnTestCase(test.NoDBTestCase,
             driver.capabilities.get('supports_address_space_passthrough'))
         self.assertTrue(
             driver.capabilities.get('supports_address_space_emulated'))
+
+    def test_update_host_specific_capabilities_without_stateless_firmware(
+            self):
+        driver = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI())
+        driver._update_host_specific_capabilities()
+        self.assertFalse(
+            driver.capabilities.get('supports_stateless_firmware'))
 
     @mock.patch.object(fakelibvirt.Connection, 'getLibVersion',
                        return_value=versionutils.convert_version_to_int(
