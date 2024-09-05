@@ -257,6 +257,9 @@ LIBVIRT_PERF_EVENT_PREFIX = 'VIR_PERF_PARAM_'
 MIN_LIBVIRT_MAXPHYSADDR = (8, 7, 0)
 MIN_QEMU_MAXPHYSADDR = (2, 7, 0)
 
+# stateless firmware support
+MIN_LIBVIRT_STATELESS_FIRMWARE = (8, 6, 0)
+
 REGISTER_IMAGE_PROPERTY_DEFAULTS = [
     'hw_machine_type',
     'hw_cdrom_bus',
@@ -918,6 +921,13 @@ class LibvirtDriver(driver.ComputeDriver):
         self.capabilities.update({
             'supports_address_space_passthrough': supports_maxphysaddr,
             'supports_address_space_emulated': supports_maxphysaddr,
+        })
+
+        supports_stateless_firmware = self._host.has_min_version(
+            lv_ver=MIN_LIBVIRT_STATELESS_FIRMWARE,
+        )
+        self.capabilities.update({
+            'supports_stateless_firmware': supports_stateless_firmware,
         })
 
     def _register_all_undefined_instance_details(self) -> None:
@@ -3083,7 +3093,8 @@ class LibvirtDriver(driver.ComputeDriver):
         try:
             guest.set_metadata(
                 self._get_guest_config_meta(
-                    instance, instance.get_network_info()))
+                    self.get_instance_driver_metadata(
+                        instance, instance.get_network_info())))
         except libvirt.libvirtError:
             LOG.warning('updating libvirt metadata failed.', instance=instance)
 
@@ -3122,7 +3133,9 @@ class LibvirtDriver(driver.ComputeDriver):
             network_info = list(filter(lambda info: info['id'] != vif['id'],
                                        instance.get_network_info()))
             guest.set_metadata(
-                self._get_guest_config_meta(instance, network_info))
+                self._get_guest_config_meta(
+                    self.get_instance_driver_metadata(
+                        instance, network_info)))
         except libvirt.libvirtError:
             LOG.warning('updating libvirt metadata failed.', instance=instance)
 
@@ -6104,39 +6117,35 @@ class LibvirtDriver(driver.ComputeDriver):
 
         return dev
 
-    def _get_guest_config_meta(self, instance, network_info):
+    def _get_guest_config_meta(self, dmeta: driver.InstanceDriverMetadata):
         """Get metadata config for guest."""
 
         meta = vconfig.LibvirtConfigGuestMetaNovaInstance()
-        meta.package = version.version_string_with_package()
-        meta.name = instance.display_name
-        meta.creationTime = time.time()
+        meta.package = dmeta.nova_package
+        meta.name = dmeta.instance_meta.name
+        meta.creationTime = dmeta.creation_time
+        meta.roottype = dmeta.root_type
+        meta.rootid = dmeta.root_id
 
-        if instance.image_ref not in ("", None):
-            meta.roottype = "image"
-            meta.rootid = instance.image_ref
-
-        system_meta = instance.system_metadata
         ometa = vconfig.LibvirtConfigGuestMetaNovaOwner()
-        ometa.userid = instance.user_id
-        ometa.username = system_meta.get('owner_user_name', 'N/A')
-        ometa.projectid = instance.project_id
-        ometa.projectname = system_meta.get('owner_project_name', 'N/A')
+        ometa.userid = dmeta.owner.userid
+        ometa.username = dmeta.owner.username
+        ometa.projectid = dmeta.owner.projectid
+        ometa.projectname = dmeta.owner.projectname
         meta.owner = ometa
 
         fmeta = vconfig.LibvirtConfigGuestMetaNovaFlavor()
-        flavor = instance.flavor
-        fmeta.name = flavor.name
-        fmeta.memory = flavor.memory_mb
-        fmeta.vcpus = flavor.vcpus
-        fmeta.ephemeral = flavor.ephemeral_gb
-        fmeta.disk = flavor.root_gb
-        fmeta.swap = flavor.swap
+        fmeta.name = dmeta.flavor.name
+        fmeta.memory = dmeta.flavor.memory_mb
+        fmeta.vcpus = dmeta.flavor.vcpus
+        fmeta.ephemeral = dmeta.flavor.ephemeral_gb
+        fmeta.disk = dmeta.flavor.root_gb
+        fmeta.swap = dmeta.flavor.swap
 
         meta.flavor = fmeta
 
         ports = []
-        for vif in network_info:
+        for vif in dmeta.network_info:
             ips = []
             for subnet in vif.get('network', {}).get('subnets', []):
                 for ip in subnet.get('ips', []):
@@ -6960,6 +6969,8 @@ class LibvirtDriver(driver.ComputeDriver):
             guest.os_mach_type = mach_type
 
             hw_firmware_type = image_meta.properties.get('hw_firmware_type')
+            hw_firmware_stateless = hardware.get_stateless_firmware_constraint(
+                image_meta)
 
             if arch == fields.Architecture.AARCH64:
                 if not hw_firmware_type:
@@ -7017,7 +7028,10 @@ class LibvirtDriver(driver.ComputeDriver):
 
                 guest.os_loader = loader
                 guest.os_loader_type = 'pflash'
-                guest.os_nvram_template = nvram_template
+                if hw_firmware_stateless:
+                    guest.os_loader_stateless = True
+                else:
+                    guest.os_nvram_template = nvram_template
 
                 # if the feature set says we need SMM then enable it
                 if requires_smm:
@@ -7384,8 +7398,10 @@ class LibvirtDriver(driver.ComputeDriver):
             guest_numa_config.numatune,
             flavor, image_meta)
 
-        guest.metadata.append(self._get_guest_config_meta(
-            instance, network_info))
+        guest.metadata.append(
+            self._get_guest_config_meta(
+                    self.get_instance_driver_metadata(
+                        instance, network_info)))
         guest.idmaps = self._get_guest_idmaps()
 
         for event in self._supported_perf_events:
@@ -12922,23 +12938,43 @@ class LibvirtDriver(driver.ComputeDriver):
             return {
                 ot.COMPUTE_SECURITY_TPM_2_0: False,
                 ot.COMPUTE_SECURITY_TPM_1_2: False,
+                ot.COMPUTE_SECURITY_TPM_TIS: False,
+                ot.COMPUTE_SECURITY_TPM_CRB: False,
             }
 
+        tpm_models = self._host.tpm_models
         tpm_versions = self._host.tpm_versions
         # libvirt < 8.6 does not provide supported versions in domain
         # capabilities
 
-        # TODO(tkajinam): Remove this once libvirt>=8.6.0 is required.
+        tr = {}
+        if tpm_models is None:
+            # TODO(tkajinam): Remove this fallback once libvirt>=8.0.0 is
+            # required.
+            tr.update({
+                ot.COMPUTE_SECURITY_TPM_TIS: True,
+                ot.COMPUTE_SECURITY_TPM_CRB: True,
+            })
+        else:
+            tr.update({
+                ot.COMPUTE_SECURITY_TPM_TIS: 'tpm-tis' in tpm_models,
+                ot.COMPUTE_SECURITY_TPM_CRB: 'tpm-crb' in tpm_models,
+            })
+
         if tpm_versions is None:
-            return {
+            # TODO(tkajinam): Remove this fallback once libvirt>=8.6.0 is
+            # required.
+            tr.update({
                 ot.COMPUTE_SECURITY_TPM_2_0: True,
                 ot.COMPUTE_SECURITY_TPM_1_2: True,
-            }
+            })
+        else:
+            tr.update({
+                ot.COMPUTE_SECURITY_TPM_2_0: '2.0' in tpm_versions,
+                ot.COMPUTE_SECURITY_TPM_1_2: '1.2' in tpm_versions,
+            })
 
-        return {
-            ot.COMPUTE_SECURITY_TPM_2_0: '2.0' in tpm_versions,
-            ot.COMPUTE_SECURITY_TPM_1_2: '1.2' in tpm_versions,
-        }
+        return tr
 
     def _get_vif_model_traits(self) -> ty.Dict[str, bool]:
         """Get vif model traits based on the currently enabled virt_type.

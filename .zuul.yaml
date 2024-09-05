@@ -130,12 +130,35 @@
         neutron-trunk: true
         openstack-cli-server: true
       devstack_local_conf:
+        post-config:
+          $NOVA_CPU_CONF:
+            compute:
+              # we want to test live migration of floating instances between hosts with different
+              # cpu_shared_set to ensure the xml is updated properly. This is important when migrating
+              # between hosts with different number of cpu cores even when cpu_shared_set is not defined.
+              # In the ci, we have 8 cpu cores, so we set the cpu_shared_set to 0-5 for the first compute
+              # node and 2-7 for the second compute node.
+              cpu_shared_set: "0-5"
+              cpu_dedicated_set: "6-7"
         test-config:
           $TEMPEST_CONFIG:
             compute-feature-enabled:
               volume_backed_live_migration: true
               block_migration_for_live_migration: true
               block_migrate_cinder_iscsi: true
+    group-vars:
+      subnode:
+        devstack_local_conf:
+          post-config:
+            $NOVA_CPU_CONF:
+              compute:
+                # we want to test live migration of floating instances between hosts with different
+                # cpu_shared_set to ensure the xml is updated properly. This is important when migrating
+                # between hosts with different number of cpu cores even when cpu_shared_set is not defined.
+                # In the ci, we have 8 cpu cores, so we set the cpu_shared_set to 0-5 for the first compute
+                # node and 2-7 for the second compute node.
+                cpu_shared_set: "2-7"
+                cpu_dedicated_set: "0-1"
     post-run: playbooks/nova-live-migration/post-run.yaml
 
 - job:
@@ -386,34 +409,7 @@
     pre-run: playbooks/nova-next/pre.yaml
     required-projects:
         - novnc/novnc
-    nodeset:
-      nodes:
-        - name: controller
-          label: nested-virt-ubuntu-jammy
-        - name: compute1
-          label: nested-virt-ubuntu-jammy
-      groups:
-        # Node where tests are executed and test results collected
-        - name: tempest
-          nodes:
-            - controller
-        # Nodes running the compute service
-        - name: compute
-          nodes:
-            - controller
-            - compute1
-        # Nodes that are not the controller
-        - name: subnode
-          nodes:
-            - compute1
-        # Switch node for multinode networking setup
-        - name: switch
-          nodes:
-            - controller
-        # Peer nodes for multinode networking setup
-        - name: peers
-          nodes:
-            - compute1
+    nodeset: openstack-two-node-noble
     vars:
       # We use the "all" environment for tempest_test_regex and
       # tempest_exclude_regex.
@@ -482,8 +478,7 @@
             neutron_plugin_options:
               available_type_drivers: flat,geneve,vlan,gre,local,vxlan
       devstack_localrc:
-        # For nested virt
-        LIBVIRT_TYPE: kvm
+        LIBVIRT_TYPE: qemu
         Q_AGENT: openvswitch
         Q_ML2_TENANT_NETWORK_TYPE: vxlan
         Q_ML2_PLUGIN_MECHANISM_DRIVERS: openvswitch
@@ -527,8 +522,7 @@
     group-vars:
       subnode:
         devstack_localrc:
-          # For nested virt
-          LIBVIRT_TYPE: kvm
+          LIBVIRT_TYPE: qemu
           Q_AGENT: openvswitch
           Q_ML2_TENANT_NETWORK_TYPE: vxlan
           Q_ML2_PLUGIN_MECHANISM_DRIVERS: openvswitch
