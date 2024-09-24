@@ -14903,6 +14903,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
             'qcow2',
             virt_disk_size,
             backing_file=backfile_path,
+            safe=False
         )
 
     @mock.patch('nova.virt.libvirt.imagebackend.Image.exists',
@@ -15054,12 +15055,14 @@ class LibvirtConnTestCase(test.NoDBTestCase,
                     'qcow2',
                     disk_info_byname['disk']['virt_disk_size'],
                     backing_file=root_backing,
+                    safe=False
                 ),
                 mock.call(
                     CONF.instances_path + '/disk.local',
                     'qcow2',
                     disk_info_byname['disk.local']['virt_disk_size'],
                     backing_file=ephemeral_backing,
+                    safe=True
                 ),
             ])
 
@@ -16626,7 +16629,8 @@ class LibvirtConnTestCase(test.NoDBTestCase,
             context=self.context)
         backend.disks['disk.swap'].cache.assert_called_once_with(
             fetch_func=mock.ANY, filename='swap_%i' % expected,
-            size=expected * units.Mi, context=self.context, swap_mb=expected)
+            size=expected * units.Mi, context=self.context, swap_mb=expected,
+            safe=True)
 
     @mock.patch.object(nova.virt.libvirt.imagebackend.Image, 'cache')
     def test_create_vz_container_with_swap(self, mock_cache):
@@ -16711,7 +16715,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         backend.disks['disk.eph0'].cache.assert_called_once_with(
             fetch_func=mock.ANY, context=self.context,
             filename=filename, size=100 * units.Gi, ephemeral_size=mock.ANY,
-            specified_fs=None)
+            specified_fs=None, safe=True)
 
     def test_create_image_resize_snap_backend(self):
         drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), False)
@@ -21002,7 +21006,8 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         # is_shared_block_storage=True and destroy_disks=False.
         instance = objects.Instance(self.context, **self.test_instance)
         migrate_data = objects.LibvirtLiveMigrateData(
-                is_shared_block_storage=True)
+                is_shared_block_storage=True,
+                is_shared_instance_path=False)
         drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI())
         drvr.cleanup(
             self.context, instance, network_info={}, destroy_disks=False,
@@ -21011,6 +21016,25 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         self.assertEqual(1, int(instance.system_metadata['clean_attempts']))
         self.assertTrue(instance.cleaned)
         save.assert_called_once_with()
+
+    @mock.patch.object(libvirt_driver.LibvirtDriver, 'delete_instance_files',
+                       return_value=True)
+    @mock.patch.object(objects.Instance, 'save')
+    @mock.patch.object(libvirt_driver.LibvirtDriver, '_undefine_domain')
+    def test_cleanup_migrate_data_block_storage_and_share_instance_dir(
+        self, _undefine_domain, save, delete_instance_files
+    ):
+        # Test the case when the instance directory is on shared storage
+        # (e.g. NFS) and the instance is booted form volume.
+        instance = objects.Instance(self.context, **self.test_instance)
+        migrate_data = objects.LibvirtLiveMigrateData(
+                is_shared_block_storage=True,
+                is_shared_instance_path=True)
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI())
+        drvr.cleanup(
+            self.context, instance, network_info={}, destroy_disks=False,
+            migrate_data=migrate_data, destroy_vifs=False)
+        delete_instance_files.assert_not_called()
 
     @mock.patch.object(libvirt_driver.LibvirtDriver, 'delete_instance_files',
                        return_value=True)
