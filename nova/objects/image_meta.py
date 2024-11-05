@@ -16,7 +16,7 @@ import copy
 
 from oslo_utils import versionutils
 
-from nova import exception
+from nova.network import model as network_model
 from nova import objects
 from nova.objects import base
 from nova.objects import fields
@@ -197,14 +197,19 @@ class ImageMetaProps(base.NovaObject):
     #                     'hw_maxphysaddr_bits' field
     # Version 1.37: Added 'hw_ephemeral_encryption_secret_uuid' field
     # Version 1.38: Added 'hw_firmware_stateless' field
+    # Version 1.39: Added igb value to 'hw_vif_model' enum
     # NOTE(efried): When bumping this version, the version of
     # ImageMetaPropsPayload must also be bumped. See its docstring for details.
-    VERSION = '1.38'
+    VERSION = '1.39'
 
     def obj_make_compatible(self, primitive, target_version):
         super(ImageMetaProps, self).obj_make_compatible(primitive,
                                                         target_version)
         target_version = versionutils.convert_version_to_tuple(target_version)
+        if target_version < (1, 39):
+            base.raise_on_too_new_values(
+                target_version, primitive,
+                'hw_vif_model', (network_model.VIF_MODEL_IGB,))
         if target_version < (1, 38):
             primitive.pop('hw_firmware_stateless', None)
         if target_version < (1, 37):
@@ -224,32 +229,23 @@ class ImageMetaProps(base.NovaObject):
         if target_version < (1, 31):
             primitive.pop('hw_emulation_architecture', None)
         if target_version < (1, 30):
-            video = primitive.get('hw_video_model', None)
-            if video == fields.VideoModel.BOCHS:
-                raise exception.ObjectActionError(
-                    action='obj_make_compatible',
-                    reason='hw_video_model=%s not supported in version %s' %
-                           (video, target_version))
+            base.raise_on_too_new_values(
+                target_version, primitive,
+                'hw_video_model', (fields.VideoModel.BOCHS,))
         if target_version < (1, 29):
             primitive.pop('hw_input_bus', None)
         if target_version < (1, 28):
-            policy = primitive.get('hw_pci_numa_affinity_policy', None)
-            if policy == fields.PCINUMAAffinityPolicy.SOCKET:
-                raise exception.ObjectActionError(
-                    action='obj_make_compatible',
-                    reason='hw_numa_affinity_policy=%s not supported '
-                           'in version %s' %
-                           (policy, target_version))
+            base.raise_on_too_new_values(
+                target_version, primitive,
+                'hw_pci_numa_affinity_policy',
+                (fields.PCINUMAAffinityPolicy.SOCKET,))
         if target_version < (1, 27):
             primitive.pop('hw_tpm_model', None)
             primitive.pop('hw_tpm_version', None)
         if target_version < (1, 26):
-            policy = primitive.get('hw_cpu_policy', None)
-            if policy == fields.CPUAllocationPolicy.MIXED:
-                raise exception.ObjectActionError(
-                    action='obj_make_compatible',
-                    reason='hw_cpu_policy=%s not supported in version %s' %
-                           (policy, target_version))
+            base.raise_on_too_new_values(
+                target_version, primitive,
+                'hw_cpu_policy', (fields.CPUAllocationPolicy.MIXED,))
         if target_version < (1, 25):
             primitive.pop('hw_pci_numa_affinity_policy', None)
         if target_version < (1, 24):
@@ -259,12 +255,12 @@ class ImageMetaProps(base.NovaObject):
         # NOTE(sean-k-mooney): unlike other nova object we version this object
         # when composed object are updated.
         if target_version < (1, 22):
-            video = primitive.get('hw_video_model', None)
-            if video in ('gop', 'virtio', 'none'):
-                raise exception.ObjectActionError(
-                    action='obj_make_compatible',
-                    reason='hw_video_model=%s not supported in version %s' % (
-                        video, target_version))
+            base.raise_on_too_new_values(
+                target_version, primitive,
+                'hw_video_model',
+                (fields.VideoModel.GOP,
+                 fields.VideoModel.VIRTIO,
+                 fields.VideoModel.NONE))
         if target_version < (1, 21):
             primitive.pop('hw_time_hpet', None)
         if target_version < (1, 20):
@@ -303,12 +299,9 @@ class ImageMetaProps(base.NovaObject):
             primitive.pop('os_require_quiesce', None)
 
         if target_version < (1, 6):
-            bus = primitive.get('hw_disk_bus', None)
-            if bus in ('lxc', 'uml'):
-                raise exception.ObjectActionError(
-                    action='obj_make_compatible',
-                    reason='hw_disk_bus=%s not supported in version %s' % (
-                        bus, target_version))
+            base.raise_on_too_new_values(
+                target_version, primitive,
+                'hw_disk_bus', (fields.DiskBus.LXC, fields.DiskBus.UML))
 
     # Maximum number of NUMA nodes permitted for the guest topology
     NUMA_NODES_MAX = 128
