@@ -965,7 +965,10 @@ def get_ksa_adapter(service_type, ksa_auth=None, ksa_session=None,
         min_version=min_version, max_version=max_version, raise_exc=False)
 
 
-def get_sdk_adapter(service_type, check_service=False):
+def get_sdk_adapter(
+    service_type, admin, check_service=False, conf_group=None,
+    context=None, **kwargs
+):
     """Construct an openstacksdk-brokered Adapter for a given service type.
 
     We expect to find a conf group whose name corresponds to the service_type's
@@ -974,24 +977,62 @@ def get_sdk_adapter(service_type, check_service=False):
 
     :param service_type: String name of the service type for which the Adapter
                          is to be constructed.
+    :param admin: If set to true, the service will use Nova's service user
+                  and password; otherwise, it will use the user's token.
     :param check_service: If True, we will query the endpoint to make sure the
             service is alive, raising ServiceUnavailable if it is not.
+    :param conf_group: String name of the conf group to use, otherwise the name
+            of the service_type will be used.
+    :param context: Use to get user's token, if admin is set to False.
+    :param kwargs: Additional arguments to pass to the Adapter constructor.
+                   Mainly used to pass microversion to a specific service,
+                   e.g. shared_file_system_api_version="2.82".
     :return: An openstack.proxy.Proxy object for the specified service_type.
     :raise: ConfGroupForServiceTypeNotFound If no conf group name could be
             found for the specified service_type.
     :raise: ServiceUnavailable if check_service is True and the service is down
     """
-    confgrp = _get_conf_group(service_type)
-    sess = _get_auth_and_session(confgrp)[1]
+    confgrp = conf_group or _get_conf_group(service_type)
+
     try:
-        conn = connection.Connection(
-            session=sess, oslo_conf=CONF, service_types={service_type},
-            strict_proxies=check_service)
+        if admin is False:
+            if context is None:
+                raise ValueError(
+                    "If admin is set to False then context cannot be None.")
+
+            # NOTE(gibi): this is only needed to make sure
+            # CONF.service_user.auth_url config is registered
+            ks_loading.load_auth_from_conf_options(
+                CONF, nova.conf.service_token.service_user.name)
+
+            # Create a connection using the user's token instead of nova's
+            # service user/pass.
+            conn = connection.Connection(
+                token=context.auth_token,
+                auth_type="v3token",
+                project_id=context.project_id,
+                project_domain_id=context.project_domain_id,
+                auth_url=CONF.service_user.auth_url,
+                service_types={service_type},
+                strict_proxies=check_service,
+                **kwargs,
+            )
+        else:
+            # Create a connection based on nova's service user/pass
+            sess = _get_auth_and_session(confgrp)[1]
+            conn = connection.Connection(
+                session=sess, oslo_conf=CONF, service_types={service_type},
+                strict_proxies=check_service, **kwargs)
+
     except sdk_exc.ServiceDiscoveryException as e:
         raise exception.ServiceUnavailable(
             _("The %(service_type)s service is unavailable: %(error)s") %
             {'service_type': service_type, 'error': str(e)})
-    return getattr(conn, service_type)
+    # The replace('-', '_') below is to handle service names that use
+    # hyphens and SDK attributes that use underscores.
+    # e.g. service name --> sdk attribute
+    #      'shared-file-system' --> 'shared_file_system'
+    return getattr(conn, service_type.replace('-', '_'))
 
 
 def get_endpoint(ksa_adapter):
