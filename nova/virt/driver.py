@@ -612,7 +612,7 @@ class ComputeDriver(object):
 
     def reboot(self, context, instance, network_info, reboot_type,
                block_device_info=None, bad_volumes_callback=None,
-               accel_info=None):
+               accel_info=None, share_info=None):
         """Reboot the specified instance.
 
         After this is called successfully, the instance's state
@@ -972,7 +972,14 @@ class ComputeDriver(object):
         """
         raise NotImplementedError()
 
-    def resume(self, context, instance, network_info, block_device_info=None):
+    def resume(
+        self,
+        context,
+        instance,
+        network_info,
+        block_device_info=None,
+        share_info=None
+    ):
         """resume the specified suspended instance.
 
         The suspended instance gets resumed and will use CPU cycles and memory
@@ -988,6 +995,8 @@ class ComputeDriver(object):
             Necessary network information for the resume.
         :param dict block_device_info:
             Instance volume block device info.
+        :param nova.objects.share_mapping.ShareMapingList share_info
+            optional list of share_mapping
 
         :return: None
         """
@@ -1007,7 +1016,7 @@ class ComputeDriver(object):
         raise NotImplementedError()
 
     def rescue(self, context, instance, network_info, image_meta,
-               rescue_password, block_device_info):
+               rescue_password, block_device_info, share_info):
         """Rescue the specified instance.
 
         :param nova.context.RequestContext context:
@@ -1021,6 +1030,8 @@ class ComputeDriver(object):
         :param rescue_password: new root password to set for rescue.
         :param dict block_device_info:
             The block device mapping of the instance.
+        :param nova.objects.share_mapping.ShareMapingList share_info
+            list of share_mapping
         """
         raise NotImplementedError()
 

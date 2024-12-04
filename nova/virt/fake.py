@@ -220,7 +220,7 @@ class FakeDriver(driver.ComputeDriver):
 
     def reboot(self, context, instance, network_info, reboot_type,
                block_device_info=None, bad_volumes_callback=None,
-               accel_info=None):
+               accel_info=None, share_info=None):
         # If the guest is not on the hypervisor and we're doing a hard reboot
         # then mimic the libvirt driver by spawning the guest.
         if (instance.uuid not in self.instances and
@@ -245,7 +245,7 @@ class FakeDriver(driver.ComputeDriver):
         pass
 
     def rescue(self, context, instance, network_info, image_meta,
-               rescue_password, block_device_info):
+               rescue_password, block_device_info, share_info):
         pass
 
     def unrescue(
@@ -321,7 +321,14 @@ class FakeDriver(driver.ComputeDriver):
     def suspend(self, context, instance):
         pass
 
-    def resume(self, context, instance, network_info, block_device_info=None):
+    def resume(
+        self,
+        context,
+        instance,
+        network_info,
+        block_device_info=None,
+        share_info=None
+    ):
         pass
 
     def destroy(self, context, instance, network_info, block_device_info=None,

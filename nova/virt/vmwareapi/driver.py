@@ -574,7 +574,7 @@ class VMwareVCDriver(driver.ComputeDriver):
 
     def reboot(self, context, instance, network_info, reboot_type,
                block_device_info=None, bad_volumes_callback=None,
-               accel_info=None):
+               accel_info=None, share_info=None):
         """Reboot VM instance."""
         self._vmops.reboot(instance, network_info, reboot_type)
 
@@ -644,12 +644,19 @@ class VMwareVCDriver(driver.ComputeDriver):
         """Suspend the specified instance."""
         self._vmops.suspend(instance)
 
-    def resume(self, context, instance, network_info, block_device_info=None):
+    def resume(
+        self,
+        context,
+        instance,
+        network_info,
+        block_device_info=None,
+        share_info=None
+    ):
         """Resume the suspended VM instance."""
         self._vmops.resume(instance)
 
     def rescue(self, context, instance, network_info, image_meta,
-               rescue_password, block_device_info):
+               rescue_password, block_device_info, share_info):
         """Rescue the specified instance."""
         self._vmops.rescue(context, instance, network_info, image_meta)
 

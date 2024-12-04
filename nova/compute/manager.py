@@ -4386,6 +4386,8 @@ class ComputeManager(manager.Manager):
 
         accel_info = self._get_accel_info(context, instance)
 
+        share_info = self._get_share_info(context, instance)
+
         self._notify_about_instance_usage(context, instance, "reboot.start")
         compute_utils.notify_about_instance_action(
             context, instance, self.host,
@@ -4423,12 +4425,24 @@ class ComputeManager(manager.Manager):
                 instance.task_state = task_states.REBOOT_STARTED_HARD
                 expected_state = task_states.REBOOT_PENDING_HARD
             instance.save(expected_task_state=expected_state)
+
+            # Attempt to mount the shares again.
+            # Note: The API ref states that soft reboot can only be
+            # done if the instance is in ACTIVE state. If the instance
+            # is in ACTIVE state it cannot have a share_mapping in ERROR
+            # so it is safe to ignore the re-mounting of the share for
+            # soft reboot.
+            if reboot_type == "HARD":
+                self._mount_all_shares(context, instance, share_info)
+
             self.driver.reboot(context, instance,
                                network_info,
                                reboot_type,
                                block_device_info=block_device_info,
                                accel_info=accel_info,
+                               share_info=share_info,
                                bad_volumes_callback=bad_volumes_callback)
+            share_info.activate_all()
 
         except Exception as error:
             with excutils.save_and_reraise_exception() as ctxt:
@@ -5024,6 +5038,8 @@ class ComputeManager(manager.Manager):
         block_device_info = self._get_instance_block_device_info(
                                 context, instance, bdms=bdms)
 
+        share_info = self._get_share_info(context, instance)
+
         extra_usage_info = {'rescue_image_name':
                             self._get_image_name(rescue_image_meta)}
         self._notify_about_instance_usage(context, instance,
@@ -5036,9 +5052,11 @@ class ComputeManager(manager.Manager):
         try:
             self._power_off_instance(context, instance, clean_shutdown)
 
+            self._mount_all_shares(context, instance, share_info)
+
             self.driver.rescue(context, instance, network_info,
                                rescue_image_meta, admin_password,
-                               block_device_info)
+                               block_device_info, share_info)
         except Exception as e:
             LOG.exception("Error trying to Rescue Instance",
                           instance=instance)
@@ -7189,6 +7207,13 @@ class ComputeManager(manager.Manager):
         block_device_info = self._get_instance_block_device_info(
             context, instance, bdms=bdms)
 
+        # This allows passing share_info to the resume operation for
+        # futur usage. However, this scenario is currently not possible
+        # because suspending an instance with a share is not permitted
+        # by libvirt. As a result, the suspend action involving a share
+        # is blocked by the API.
+        share_info = self._get_share_info(context, instance)
+
         compute_utils.notify_about_instance_action(context, instance,
             self.host, action=fields.NotificationAction.RESUME,
             phase=fields.NotificationPhase.START, bdms=bdms)
@@ -7198,7 +7223,7 @@ class ComputeManager(manager.Manager):
         with self._error_out_instance_on_exception(context, instance,
              instance_state=instance.vm_state):
             self.driver.resume(context, instance, network_info,
-                               block_device_info)
+                               block_device_info, share_info)
 
         instance.power_state = self._get_power_state(instance)
 

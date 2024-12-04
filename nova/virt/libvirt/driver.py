@@ -2178,7 +2178,7 @@ class LibvirtDriver(driver.ComputeDriver):
 
         """
         # NOTE(lyarwood): Skip any attempt to fetch encryption metadata or the
-        # actual passphrase from the key manager if a libvirt secert already
+        # actual passphrase from the key manager if a libvirt secret already
         # exists locally for the volume. This suggests that the instance was
         # only powered off or the underlying host rebooted.
         volume_id = driver_block_device.get_volume_id(connection_info)
@@ -2441,7 +2441,7 @@ class LibvirtDriver(driver.ComputeDriver):
         self._disconnect_volume(context, old_connection_info, instance)
 
     def _get_existing_domain_xml(self, instance, network_info,
-                                 block_device_info=None):
+                                 block_device_info=None, share_info=None):
         try:
             guest = self._host.get_guest(instance)
             xml = guest.get_xml_desc()
@@ -2453,7 +2453,8 @@ class LibvirtDriver(driver.ComputeDriver):
             xml = self._get_guest_xml(nova_context.get_admin_context(),
                                       instance, network_info, disk_info,
                                       instance.image_meta,
-                                      block_device_info=block_device_info)
+                                      block_device_info=block_device_info,
+                                      share_info=share_info)
         return xml
 
     def emit_event(self, event: virtevent.InstanceEvent) -> None:
@@ -3998,7 +3999,7 @@ class LibvirtDriver(driver.ComputeDriver):
 
     def reboot(self, context, instance, network_info, reboot_type,
                block_device_info=None, bad_volumes_callback=None,
-               accel_info=None):
+               accel_info=None, share_info=None):
         """Reboot a virtual machine, given an instance reference."""
         if reboot_type == 'SOFT':
             # NOTE(vish): This will attempt to do a graceful shutdown/restart.
@@ -4019,7 +4020,7 @@ class LibvirtDriver(driver.ComputeDriver):
                             "Trying hard reboot.",
                             instance=instance)
         return self._hard_reboot(context, instance, network_info,
-           objects.ShareMappingList(), block_device_info, accel_info
+           share_info, block_device_info, accel_info
         )
 
     def _soft_reboot(self, instance):
@@ -4207,6 +4208,10 @@ class LibvirtDriver(driver.ComputeDriver):
 
         timer = loopingcall.FixedIntervalLoopingCall(_wait_for_reboot)
         timer.start(interval=0.5).wait()
+
+        # Rebuild device_metadata to get shares
+        instance.device_metadata = self._build_device_metadata(
+            context, instance)
 
     def pause(self, instance):
         """Pause VM instance."""
@@ -4396,10 +4401,20 @@ class LibvirtDriver(driver.ComputeDriver):
         self._detach_mediated_devices(guest)
         guest.save_memory_state()
 
-    def resume(self, context, instance, network_info, block_device_info=None):
+    def resume(
+        self,
+        context,
+        instance,
+        network_info,
+        block_device_info=None,
+        share_info=None
+    ):
         """resume the specified instance."""
+        if share_info is None:
+            share_info = objects.ShareMappingList()
+
         xml = self._get_existing_domain_xml(instance, network_info,
-                                            block_device_info)
+                                            block_device_info, share_info)
         # NOTE(gsantos): The mediated devices that were removed on suspension
         # are still present in the xml. Let's take their references from it
         # and re-attach them.
@@ -4450,7 +4465,7 @@ class LibvirtDriver(driver.ComputeDriver):
         )
 
     def rescue(self, context, instance, network_info, image_meta,
-               rescue_password, block_device_info):
+               rescue_password, block_device_info, share_info):
         """Loads a VM using rescue images.
 
         A rescue is normally performed when something goes wrong with the
@@ -4481,9 +4496,13 @@ class LibvirtDriver(driver.ComputeDriver):
         :param rescue_password: new root password to set for rescue.
         :param dict block_device_info:
             The block device mapping of the instance.
+        :param nova.objects.ShareMappingList share_info:
+            list of share_mapping
         """
+
         instance_dir = libvirt_utils.get_instance_path(instance)
-        unrescue_xml = self._get_existing_domain_xml(instance, network_info)
+        unrescue_xml = self._get_existing_domain_xml(
+            instance, network_info, share_info=share_info)
         unrescue_xml_path = os.path.join(instance_dir, 'unrescue.xml')
         with open(unrescue_xml_path, 'w') as f:
             f.write(unrescue_xml)
@@ -4569,7 +4588,8 @@ class LibvirtDriver(driver.ComputeDriver):
         xml = self._get_guest_xml(context, instance, network_info, disk_info,
                                   image_meta, rescue=rescue_images,
                                   mdevs=mdevs,
-                                  block_device_info=block_device_info)
+                                  block_device_info=block_device_info,
+                                  share_info=share_info)
         self._destroy(instance)
         self._create_guest(
             context, xml, instance, post_xml_callback=gen_confdrive,
@@ -11480,19 +11500,6 @@ class LibvirtDriver(driver.ComputeDriver):
                 self._create_images_and_backing(
                     context, instance, instance_dir, disk_info,
                     fallback_from_host=instance.host)
-                if (configdrive.required_by(instance) and
-                        CONF.config_drive_format == 'iso9660'):
-                    # NOTE(pkoniszewski): Due to a bug in libvirt iso config
-                    # drive needs to be copied to destination prior to
-                    # migration when instance path is not shared and block
-                    # storage is not shared. Files that are already present
-                    # on destination are excluded from a list of files that
-                    # need to be copied to destination. If we don't do that
-                    # live migration will fail on copying iso config drive to
-                    # destination and writing to read-only device.
-                    # Please see bug/1246201 for more details.
-                    src = "%s:%s/disk.config" % (instance.host, instance_dir)
-                    self._remotefs.copy_file(src, instance_dir)
 
             if not is_block_migration:
                 # NOTE(angdraug): when block storage is shared between source
@@ -12750,6 +12757,25 @@ class LibvirtDriver(driver.ComputeDriver):
             device.bus = bus
         return device
 
+    def _build_share_metadata(self, dev, shares):
+        """Builds a metadata object for a share
+
+        :param dev: The vconfig.LibvirtConfigGuestFilesys to build
+         metadata for.
+        :param shares: The list of ShareMapping objects.
+        :return: A ShareMetadata object, or None.
+        """
+        device = objects.ShareMetadata()
+
+        for share in shares:
+            if dev.driver_type == 'virtiofs' and share.tag == dev.target_dir:
+                device.share_id = share.share_id
+                device.tag = share.tag
+                return device
+        LOG.warning('Device %s of type filesystem found but it is not '
+                    'linked to any share.', dev)
+        return None
+
     def _build_hostdev_metadata(self, dev, vifs_to_expose, vlans_by_mac):
         """Builds a metadata object for a hostdev. This can only be a PF, so we
         don't need trusted_by_mac like in _build_interface_metadata because
@@ -12808,6 +12834,10 @@ class LibvirtDriver(driver.ComputeDriver):
             context, instance.uuid)
         tagged_bdms = {_get_device_name(bdm): bdm for bdm in bdms if bdm.tag}
 
+        shares = objects.ShareMappingList.get_by_instance_uuid(
+            context, instance.uuid
+        )
+
         devices = []
         guest = self._host.get_guest(instance)
         xml = guest.get_xml_desc()
@@ -12826,6 +12856,8 @@ class LibvirtDriver(driver.ComputeDriver):
             if isinstance(dev, vconfig.LibvirtConfigGuestHostdevPCI):
                 device = self._build_hostdev_metadata(dev, vifs_to_expose,
                                                       vlans_by_mac)
+            if isinstance(dev, vconfig.LibvirtConfigGuestFilesys):
+                device = self._build_share_metadata(dev, shares)
             if device:
                 devices.append(device)
         if devices:
