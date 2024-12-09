@@ -4637,15 +4637,6 @@ class ComputeManager(manager.Manager):
 
         @utils.synchronized(share_mapping.share_id)
         def _allow_share(context, instance, share_mapping):
-            def _has_access():
-                access = self.manila_api.get_access(
-                    context,
-                    share_mapping.share_id,
-                    access_type,
-                    access_to
-                )
-                return access is not None and access.state == 'active'
-
             def _apply_policy():
                 # self.manila_api.lock(share_mapping.share_id)
                 # Explicitly locking the share is not needed as
@@ -4654,8 +4645,8 @@ class ComputeManager(manager.Manager):
                 self.manila_api.allow(
                     context,
                     share_mapping.share_id,
-                    access_type,
-                    access_to,
+                    share_mapping.access_type,
+                    share_mapping.access_to,
                     "rw",
                 )
 
@@ -4665,7 +4656,12 @@ class ComputeManager(manager.Manager):
                 max_retries = CONF.manila.share_apply_policy_timeout
                 attempt_count = 0
                 while attempt_count < max_retries:
-                    if _has_access():
+                    if self.manila_api.has_access(
+                        context,
+                        share_mapping.share_id,
+                        share_mapping.access_type,
+                        share_mapping.access_to,
+                    ):
                         LOG.debug(
                             "Allow policy set on share %s ",
                             share_mapping.share_id,
@@ -4687,10 +4683,23 @@ class ComputeManager(manager.Manager):
                     )
 
             try:
-                access_type = 'ip'
-                access_to = CONF.my_shared_fs_storage_ip
+                compute_utils.notify_about_share_attach_detach(
+                    context,
+                    instance,
+                    instance.host,
+                    action=fields.NotificationAction.SHARE_ATTACH,
+                    phase=fields.NotificationPhase.START,
+                    share_id=share_mapping.share_id
+                )
 
-                if not _has_access():
+                share_mapping.set_access_according_to_protocol()
+
+                if not self.manila_api.has_access(
+                    context,
+                    share_mapping.share_id,
+                    share_mapping.access_type,
+                    share_mapping.access_to,
+                ):
                     _apply_policy()
                     _wait_policy_to_be_applied()
 
@@ -4699,12 +4708,31 @@ class ComputeManager(manager.Manager):
                     share_mapping, fields.ShareMappingStatus.INACTIVE
                 )
 
+                compute_utils.notify_about_share_attach_detach(
+                    context,
+                    instance,
+                    instance.host,
+                    action=fields.NotificationAction.SHARE_ATTACH,
+                    phase=fields.NotificationPhase.END,
+                    share_id=share_mapping.share_id
+                )
+
             except (
                 exception.ShareNotFound,
+                exception.ShareProtocolNotSupported,
                 exception.ShareAccessGrantError,
             ) as e:
                 self._set_share_mapping_status(
                     share_mapping, fields.ShareMappingStatus.ERROR
+                )
+                compute_utils.notify_about_share_attach_detach(
+                    context,
+                    instance,
+                    instance.host,
+                    action=fields.NotificationAction.SHARE_ATTACH,
+                    phase=fields.NotificationPhase.ERROR,
+                    share_id=share_mapping.share_id,
+                    exception=e
                 )
                 LOG.error(e.format_message())
                 raise
@@ -4713,6 +4741,15 @@ class ComputeManager(manager.Manager):
             ) as e:
                 self._set_share_mapping_status(
                     share_mapping, fields.ShareMappingStatus.ERROR
+                )
+                compute_utils.notify_about_share_attach_detach(
+                    context,
+                    instance,
+                    instance.host,
+                    action=fields.NotificationAction.SHARE_ATTACH,
+                    phase=fields.NotificationPhase.ERROR,
+                    share_id=share_mapping.share_id,
+                    exception=e
                 )
                 LOG.error(
                     "%s: %s error from url: %s, %s",
@@ -4725,6 +4762,15 @@ class ComputeManager(manager.Manager):
             except keystone_exception.http.Unauthorized as e:
                 self._set_share_mapping_status(
                     share_mapping, fields.ShareMappingStatus.ERROR
+                )
+                compute_utils.notify_about_share_attach_detach(
+                    context,
+                    instance,
+                    instance.host,
+                    action=fields.NotificationAction.SHARE_ATTACH,
+                    phase=fields.NotificationPhase.ERROR,
+                    share_id=share_mapping.share_id,
+                    exception=e
                 )
                 LOG.error(e)
                 raise
@@ -4773,12 +4819,10 @@ class ComputeManager(manager.Manager):
                 )
 
             try:
-                still_used = check_share_usage(
-                    context, instance.uuid
-                )
+                still_used = check_share_usage(context, instance.uuid)
 
-                access_type = 'ip'
-                access_to = CONF.my_shared_fs_storage_ip
+                share_mapping.set_access_according_to_protocol()
+
                 if not still_used:
                     # self.manila_api.unlock(share_mapping.share_id)
                     # Explicit unlocking the share is not needed as
@@ -4787,13 +4831,16 @@ class ComputeManager(manager.Manager):
                     self.manila_api.deny(
                         context,
                         share_mapping.share_id,
-                        access_type,
-                        access_to,
+                        share_mapping.access_type,
+                        share_mapping.access_to,
                     )
 
                 share_mapping.delete()
 
-            except exception.ShareAccessRemovalError as e:
+            except (
+                exception.ShareAccessRemovalError,
+                exception.ShareProtocolNotSupported,
+            ) as e:
                 self._set_share_mapping_status(
                     share_mapping, fields.ShareMappingStatus.ERROR
                 )
@@ -4810,7 +4857,25 @@ class ComputeManager(manager.Manager):
                 # remove from manila, so we can still detach the share.
                 share_mapping.delete()
 
+        compute_utils.notify_about_share_attach_detach(
+            context,
+            instance,
+            instance.host,
+            action=fields.NotificationAction.SHARE_DETACH,
+            phase=fields.NotificationPhase.START,
+            share_id=share_mapping.share_id
+        )
+
         _deny_share(context, instance, share_mapping)
+
+        compute_utils.notify_about_share_attach_detach(
+            context,
+            instance,
+            instance.host,
+            action=fields.NotificationAction.SHARE_DETACH,
+            phase=fields.NotificationPhase.END,
+            share_id=share_mapping.share_id
+        )
 
     @wrap_exception()
     def _mount_all_shares(self, context, instance, share_info):
@@ -4828,16 +4893,31 @@ class ComputeManager(manager.Manager):
         @utils.synchronized(share_mapping.share_id)
         def _mount_share(context, instance, share_mapping):
             try:
+                share_mapping.set_access_according_to_protocol()
+
+                if share_mapping.share_proto == (
+                    fields.ShareMappingProto.CEPHFS):
+                    share_mapping.enhance_with_ceph_credentials(context)
+
                 LOG.debug("Mounting share %s", share_mapping.share_id)
                 self.driver.mount_share(context, instance, share_mapping)
 
             except (
+                exception.ShareNotFound,
+                exception.ShareProtocolNotSupported,
                 exception.ShareMountError,
             ) as e:
                 self._set_share_mapping_and_instance_in_error(
                     instance, share_mapping
                 )
                 LOG.error(e.format_message())
+                raise
+            except (sdk_exc.BadRequestException) as e:
+                self._set_share_mapping_and_instance_in_error(
+                    instance, share_mapping
+                )
+                LOG.error("%s: %s error from url: %s, %s", e.message, e.source,
+                          e.url, e.details)
                 raise
 
         _mount_share(context, instance, share_mapping)
@@ -4848,10 +4928,18 @@ class ComputeManager(manager.Manager):
         @utils.synchronized(share_mapping.share_id)
         def _umount_share(context, instance, share_mapping):
             try:
+                share_mapping.set_access_according_to_protocol()
+
+                if share_mapping.share_proto == (
+                    fields.ShareMappingProto.CEPHFS):
+                    share_mapping.enhance_with_ceph_credentials(context)
+
                 self.driver.umount_share(context, instance, share_mapping)
 
             except (
+                exception.ShareNotFound,
                 exception.ShareUmountError,
+                exception.ShareProtocolNotSupported,
             ) as e:
                 self._set_share_mapping_and_instance_in_error(
                     instance, share_mapping

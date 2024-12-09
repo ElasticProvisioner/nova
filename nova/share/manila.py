@@ -203,12 +203,15 @@ class API(object):
         def filter_export_locations(export_locations):
             # Return the preferred path otherwise choose the first one
             paths = []
-            for export_location in export_locations:
-                if export_location.is_preferred:
-                    return export_location.path
-                else:
-                    paths.append(export_location.path)
-            return paths[0]
+            try:
+                for export_location in export_locations:
+                    if export_location.is_preferred:
+                        return export_location.path
+                    else:
+                        paths.append(export_location.path)
+                return paths[0]
+            except (IndexError, NameError):
+                return None
 
         client = _manilaclient(context, admin=False)
         LOG.debug("Get share id:'%s' data from manila", share_id)
@@ -324,10 +327,28 @@ class API(object):
         if access:
             client = _manilaclient(context, admin=True)
             LOG.debug("Deny host access to share id:'%s'", share_id)
-            resp = client.delete_access_rule(access.id, share_id)
+            resp = client.delete_access_rule(
+                access.id, share_id, unrestrict=True
+            )
             if resp.status_code != 202:
                 raise exception.ShareAccessRemovalError(
                     share_id=share_id, reason=resp.reason
                 )
         else:
             raise exception.ShareAccessNotFound(share_id=share_id)
+
+    def has_access(self, context, share_id, access_type, access_to):
+        """Helper method to check if a policy is applied to a share
+        :param context: The request context.
+        :param share_id: the id of the share
+        :param access_type: the type of access ("ip", "cert", "user")
+        :param access_to: ip:cidr or cert:cn or user:group or user name
+        :returns: boolean, true means the policy is applied.
+        """
+        access = self.get_access(
+            context,
+            share_id,
+            access_type,
+            access_to
+        )
+        return access is not None and access.state == 'active'

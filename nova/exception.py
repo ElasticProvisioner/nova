@@ -179,6 +179,19 @@ class ForbiddenWithAccelerators(NotSupported):
     msg_fmt = _("Feature not supported with instances that have accelerators.")
 
 
+class ForbiddenSharesNotSupported(NotSupported):
+    msg_fmt = _("Feature not supported until computes have not been updated.")
+
+
+class ForbiddenSharesNotConfiguredCorrectly(NotSupported):
+    msg_fmt = _("Feature not supported because either compute or instance "
+                "are not configured correctly.")
+
+
+class ForbiddenWithShare(NotSupported):
+    msg_fmt = _("Feature not supported with instances that have shares.")
+
+
 class ForbiddenPortsWithAccelerator(NotSupported):
     msg_fmt = _("Feature not supported with Ports that have accelerators.")
 
@@ -708,12 +721,22 @@ class ShareNotFound(NotFound):
     msg_fmt = _("Share %(share_id)s could not be found.")
 
 
+class ShareStatusIncorect(NotFound):
+    msg_fmt = _("Share %(share_id)s is in '%(status)s' instead of "
+                "'available' status.")
+
+
 class ShareMappingAlreadyExists(NotFound):
-    msg_fmt = _("Share %(share_id)s already associated to this server.")
+    msg_fmt = _("Share '%(share_id)s' or tag '%(tag)s' already associated "
+                "to this server.")
 
 
-class ShareProtocolUnknown(NotFound):
-    msg_fmt = _("Share protocol %(share_proto)s is unknown.")
+class ShareProtocolNotSupported(NotFound):
+    msg_fmt = _("Share protocol %(share_proto)s is not supported.")
+
+
+class ShareMissingExportLocation(NotFound):
+    msg_fmt = _("Share %(share_id)s export location is missing.")
 
 
 class ShareError(NovaException):
@@ -751,6 +774,29 @@ class ShareAccessGrantError(NovaException):
 
 class ShareAccessRemovalError(NovaException):
     msg_fmt = _("Share access could not be removed from "
+                "share id %(share_id)s.\n"
+                "Reason: %(reason)s.")
+
+
+class ShareLockNotFound(NovaException):
+    msg_fmt = _("Share lock can not be found for "
+                "share id %(share_id)s.\n")
+
+
+class ShareLockError(NovaException):
+    msg_fmt = _("Share lock can not be acquired from "
+                "share id %(share_id)s.\n"
+                "Reason: %(reason)s.")
+
+
+class ShareLockAlreadyExists(NovaException):
+    msg_fmt = _("Share lock can not be acquired from "
+                "share id %(share_id)s.\n"
+                "Reason: lock already exists.")
+
+
+class ShareUnlockError(NovaException):
+    msg_fmt = _("Share can not be unlocked from "
                 "share id %(share_id)s.\n"
                 "Reason: %(reason)s.")
 
