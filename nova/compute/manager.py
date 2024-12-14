@@ -4633,6 +4633,8 @@ class ComputeManager(manager.Manager):
 
     @messaging.expected_exceptions(NotImplementedError)
     @wrap_exception()
+    @wrap_instance_event(prefix='compute')
+    @wrap_instance_fault
     def allow_share(self, context, instance, share_mapping):
 
         @utils.synchronized(share_mapping.share_id)
@@ -4779,10 +4781,13 @@ class ComputeManager(manager.Manager):
 
     @messaging.expected_exceptions(NotImplementedError)
     @wrap_exception()
+    @wrap_instance_event(prefix='compute')
+    @wrap_instance_fault
     def deny_share(self, context, instance, share_mapping):
 
         @utils.synchronized(share_mapping.share_id)
         def _deny_share(context, instance, share_mapping):
+
             def check_share_usage(context, instance_uuid):
                 share_mappings_used_by_share = (
                     objects.share_mapping.ShareMappingList.get_by_share_id(
@@ -4819,6 +4824,15 @@ class ComputeManager(manager.Manager):
                 )
 
             try:
+                compute_utils.notify_about_share_attach_detach(
+                    context,
+                    instance,
+                    instance.host,
+                    action=fields.NotificationAction.SHARE_DETACH,
+                    phase=fields.NotificationPhase.START,
+                    share_id=share_mapping.share_id,
+                )
+
                 still_used = check_share_usage(context, instance.uuid)
 
                 share_mapping.set_access_according_to_protocol()
@@ -4837,6 +4851,15 @@ class ComputeManager(manager.Manager):
 
                 share_mapping.delete()
 
+                compute_utils.notify_about_share_attach_detach(
+                    context,
+                    instance,
+                    instance.host,
+                    action=fields.NotificationAction.SHARE_DETACH,
+                    phase=fields.NotificationPhase.END,
+                    share_id=share_mapping.share_id,
+                )
+
             except (
                 exception.ShareAccessRemovalError,
                 exception.ShareProtocolNotSupported,
@@ -4844,11 +4867,29 @@ class ComputeManager(manager.Manager):
                 self._set_share_mapping_status(
                     share_mapping, fields.ShareMappingStatus.ERROR
                 )
+                compute_utils.notify_about_share_attach_detach(
+                    context,
+                    instance,
+                    instance.host,
+                    action=fields.NotificationAction.SHARE_DETACH,
+                    phase=fields.NotificationPhase.ERROR,
+                    share_id=share_mapping.share_id,
+                    exception=e
+                )
                 LOG.error(e.format_message())
                 raise
             except keystone_exception.http.Unauthorized as e:
                 self._set_share_mapping_status(
                     share_mapping, fields.ShareMappingStatus.ERROR
+                )
+                compute_utils.notify_about_share_attach_detach(
+                    context,
+                    instance,
+                    instance.host,
+                    action=fields.NotificationAction.SHARE_DETACH,
+                    phase=fields.NotificationPhase.ERROR,
+                    share_id=share_mapping.share_id,
+                    exception=e
                 )
                 LOG.error(e)
                 raise
@@ -4856,26 +4897,16 @@ class ComputeManager(manager.Manager):
                 # Ignore the error if for any reason there is nothing to
                 # remove from manila, so we can still detach the share.
                 share_mapping.delete()
-
-        compute_utils.notify_about_share_attach_detach(
-            context,
-            instance,
-            instance.host,
-            action=fields.NotificationAction.SHARE_DETACH,
-            phase=fields.NotificationPhase.START,
-            share_id=share_mapping.share_id
-        )
+                compute_utils.notify_about_share_attach_detach(
+                    context,
+                    instance,
+                    instance.host,
+                    action=fields.NotificationAction.SHARE_DETACH,
+                    phase=fields.NotificationPhase.END,
+                    share_id=share_mapping.share_id,
+                )
 
         _deny_share(context, instance, share_mapping)
-
-        compute_utils.notify_about_share_attach_detach(
-            context,
-            instance,
-            instance.host,
-            action=fields.NotificationAction.SHARE_DETACH,
-            phase=fields.NotificationPhase.END,
-            share_id=share_mapping.share_id
-        )
 
     @wrap_exception()
     def _mount_all_shares(self, context, instance, share_info):
@@ -5530,6 +5561,50 @@ class ComputeManager(manager.Manager):
                               'Error: %s', bdm.attachment_id, str(e),
                               instance_uuid=bdm.instance_uuid)
 
+    def _update_bdm_for_swap_to_finish_resize(
+            self, context, instance, confirm=True):
+        """This updates bdm.swap with new swap info"""
+
+        bdms = instance.get_bdms()
+        if not (instance.old_flavor and instance.new_flavor):
+            return bdms
+
+        if instance.old_flavor.swap == instance.new_flavor.swap:
+            return bdms
+
+        old_swap = instance.old_flavor.swap
+        new_swap = instance.new_flavor.swap
+        if not confirm:
+            # revert flavor on _finish_revert_resize
+            old_swap = instance.new_flavor.swap
+            new_swap = instance.old_flavor.swap
+
+        # add swap
+        if old_swap == 0 and new_swap:
+            # (auniyal)old_swap = 0 means we did not have swap bdm
+            # for this instance.
+            # and as there is a new_swap, its a swap addition
+            new_swap_bdm = block_device.create_blank_bdm(new_swap, 'swap')
+            bdm_obj = objects.BlockDeviceMapping(
+                context, instance_uuid=instance.uuid, **new_swap_bdm)
+            bdm_obj.update_or_create()
+            return instance.get_bdms()
+
+        # update swap
+        for bdm in bdms:
+            if bdm.guest_format == 'swap' and bdm.device_type == 'disk':
+                if new_swap > 0:
+                    LOG.info('Adding swap BDM.', instance=instance)
+                    bdm.volume_size = new_swap
+                    bdm.save()
+                    break
+                elif new_swap == 0:
+                    LOG.info('Deleting swap BDM.', instance=instance)
+                    bdm.destroy()
+                    bdms.objects.remove(bdm)
+                    break
+        return bdms
+
     @wrap_exception()
     @reverts_task_state
     @wrap_instance_event(prefix='compute')
@@ -5872,8 +5947,9 @@ class ComputeManager(manager.Manager):
     ):
         """Inner version of finish_revert_resize."""
         with self._error_out_instance_on_exception(context, instance):
-            bdms = objects.BlockDeviceMappingList.get_by_instance_uuid(
-                context, instance.uuid)
+            bdms = self._update_bdm_for_swap_to_finish_resize(
+                context, instance, confirm=False)
+
             self._notify_about_instance_usage(
                     context, instance, "resize.revert.start")
             compute_utils.notify_about_instance_action(context, instance,
@@ -6815,8 +6891,7 @@ class ComputeManager(manager.Manager):
         The caller must revert the instance's allocations if the migration
         process failed.
         """
-        bdms = objects.BlockDeviceMappingList.get_by_instance_uuid(
-            context, instance.uuid)
+        bdms = self._update_bdm_for_swap_to_finish_resize(context, instance)
 
         with self._error_out_instance_on_exception(context, instance):
             image_meta = objects.ImageMeta.from_dict(image)
