@@ -16,8 +16,10 @@
 
 """Tests For miscellaneous util methods used with compute."""
 
+import collections
 import copy
 import datetime
+import socket
 import string
 from unittest import mock
 
@@ -1155,17 +1157,31 @@ class ComputeUtilsTestCase(test.NoDBTestCase):
         self.assertRaises(test.TestingException,
                           self._test_event_reporter_graceful_exit, error)
 
-    @mock.patch('netifaces.interfaces')
-    def test_get_machine_ips_value_error(self, mock_interfaces):
-        # Tests that the utility method does not explode if netifaces raises
-        # a ValueError.
-        iface = mock.sentinel
-        mock_interfaces.return_value = [iface]
-        with mock.patch('netifaces.ifaddresses',
-                        side_effect=ValueError) as mock_ifaddresses:
-            addresses = compute_utils.get_machine_ips()
-            self.assertEqual([], addresses)
-        mock_ifaddresses.assert_called_once_with(iface)
+    @mock.patch('psutil.net_if_addrs')
+    def test_get_machine_ips(self, mock_addrs):
+        fakeaddr = collections.namedtuple('fakeaddr', ['family', 'address'])
+        mock_addrs.return_value = {
+            'eth0': [
+                fakeaddr(family=socket.AF_INET, address='192.0.2.2'),
+                fakeaddr(family=socket.AF_INET6, address='2001:db8::10'),
+                fakeaddr(family=socket.AF_PACKET, address='10:00:00:00:00:10')
+            ],
+            'eth1': [
+                fakeaddr(family=socket.AF_INET, address='192.0.2.130'),
+                fakeaddr(family=socket.AF_INET6,
+                         address='2001:db8::f010%eth1'),
+                fakeaddr(family=socket.AF_PACKET, address='10:00:00:00:00:11')
+            ]
+        }
+        self.assertEqual(
+            [
+                '192.0.2.2',
+                '2001:db8::10',
+                '192.0.2.130',
+                '2001:db8::f010'
+            ],
+            compute_utils.get_machine_ips()
+        )
 
     @mock.patch('nova.compute.utils.notify_about_instance_action')
     @mock.patch('nova.compute.utils.notify_about_instance_usage')
