@@ -5993,8 +5993,9 @@ remote_console_protocol:
 remote_console_type:
   description: |
     The type of remote console. The valid values are ``novnc``,
-    ``spice-html5``, ``serial``, and ``webmks``. The type
-    ``webmks`` is added since Microversion ``2.8``.
+    ``spice-html5``, ``spice-direct``, ``serial``, and ``webmks``. The type
+    ``webmks`` was added in Microversion ``2.8``, and the type
+    ``spice-direct`` was added in Microversion ``2.99``.
   in: body
   required: true
   type: string
@@ -6126,6 +6127,14 @@ running_vms_total:
   in: body
   required: true
   type: integer
+scheduler_hints:
+  description: |
+    The dictionary of hints sent to the scheduler during server
+    creation time.
+  in: body
+  required: true
+  type: object
+  min_version: 2.100
 secgroup_default_rule_id:
   description: |
     The security group default rule ID.
@@ -7102,6 +7111,12 @@ tenant_usages:
   in: body
   required: true
   type: array
+tls_port_number:
+  description: |
+    The port number of a port requiring a TLS connection.
+  in: body
+  required: false
+  type: integer
 to_port:
   description: |
     The port at end of range.
