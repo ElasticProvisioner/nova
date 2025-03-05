@@ -1253,8 +1253,8 @@ behavior.
 2.96 (Maximum in 2024.1 Caracal and 2024.2 Dalmatian)
 -----------------------------------------------------
 
-The ``server show`` and ``server list --long`` responses now include the
-pinned availability zone as well.
+The ``server show``, ``server list --long``, ``server update``, and
+``server rebuild`` responses now include the pinned availability zone as well.
 
 .. _microversion 2.97:
 
@@ -1277,8 +1277,9 @@ to the `manage-shares documentation`_.
 Add support for including image properties as new ``properties`` subkey
 under the struct at the existing ``image`` key in the response for
 ``GET /servers/{server_id}`` (server show), ``GET /servers/detail``
-(list server --long) and in the rebuild case of
-``POST /server/{server_id}/action`` (server rebuild) API response.
+(list server --long), ``PUT /servers/{server_id}`` (server update), and in the
+rebuild case of ``POST /server/{server_id}/action`` (server rebuild)
+API response.
 
 .. _microversion 2.99:
 

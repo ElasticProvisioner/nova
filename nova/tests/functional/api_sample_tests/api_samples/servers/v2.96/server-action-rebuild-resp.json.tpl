@@ -2,11 +2,11 @@
     "server": {
         "OS-DCF:diskConfig": "AUTO",
         "OS-EXT-AZ:availability_zone": "us-west",
-        "OS-EXT-SRV-ATTR:hostname": "updated-hostname.example.com",
+        "OS-EXT-SRV-ATTR:hostname": "%(hostname)s",
         "OS-EXT-STS:power_state": 1,
         "OS-EXT-STS:task_state": null,
         "OS-EXT-STS:vm_state": "active",
-        "OS-SRV-USG:launched_at": "2021-08-19T15:16:22.177882",
+        "OS-SRV-USG:launched_at": "%(strtime)s",
         "OS-SRV-USG:terminated_at": null,
         "accessIPv4": "1.2.3.4",
         "accessIPv6": "80fe::",
@@ -22,7 +22,7 @@
         },
         "adminPass": "seekr3t",
         "config_drive": "",
-        "created": "2019-04-23T17:10:22Z",
+        "created": "%(isotime)s",
         "description": null,
         "flavor": {
             "disk": 1,
@@ -34,35 +34,24 @@
             "vcpus": 1
         },
         "hostId": "2091634baaccdc4c5a1d57069c833e402921df696b7f970791b12ec6",
-        "id": "0c37a84a-c757-4f22-8c7f-0bf8b6970886",
+        "id": "%(id)s",
         "image": {
-            "id": "70a599e0-31e7-49b7-b260-868f441e862b",
+            "id": "%(uuid)s",
             "links": [
                 {
-                    "href": "http://openstack.example.com/6f70656e737461636b20342065766572/images/70a599e0-31e7-49b7-b260-868f441e862b",
+                    "href": "%(compute_endpoint)s/images/%(uuid)s",
                     "rel": "bookmark"
                 }
-            ],
-            "properties": {
-                "architecture": "x86_64",
-                "auto_disk_config": "True",
-                "base_image_ref": "70a599e0-31e7-49b7-b260-868f441e862b",
-                "container_format": "ova",
-                "disk_format": "vhd",
-                "kernel_id": "nokernel",
-                "min_disk": "1",
-                "min_ram": "0",
-                "ramdisk_id": "nokernel"
-            }
+            ]
         },
         "key_name": null,
         "links": [
             {
-                "href": "http://openstack.example.com/v2.1/6f70656e737461636b20342065766572/servers/0c37a84a-c757-4f22-8c7f-0bf8b6970886",
+                "href": "%(versioned_compute_endpoint)s/servers/%(uuid)s",
                 "rel": "self"
             },
             {
-                "href": "http://openstack.example.com/6f70656e737461636b20342065766572/servers/0c37a84a-c757-4f22-8c7f-0bf8b6970886",
+                "href": "%(compute_endpoint)s/servers/%(id)s",
                 "rel": "bookmark"
             }
         ],
@@ -85,7 +74,7 @@
         "tags": [],
         "tenant_id": "6f70656e737461636b20342065766572",
         "trusted_image_certificates": null,
-        "updated": "2019-04-23T17:10:24Z",
+        "updated": "%(isotime)s",
         "user_data": "ZWNobyAiaGVsbG8gd29ybGQi",
         "user_id": "fake"
     }

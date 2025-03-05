@@ -1,29 +1,21 @@
 {
     "server": {
-        "OS-DCF:diskConfig": "AUTO",
-        "OS-EXT-AZ:availability_zone": "us-west",
-        "OS-EXT-SRV-ATTR:hostname": "%(hostname)s",
-        "OS-EXT-STS:power_state": 1,
-        "OS-EXT-STS:task_state": null,
-        "OS-EXT-STS:vm_state": "active",
-        "OS-SRV-USG:launched_at": "%(strtime)s",
-        "OS-SRV-USG:terminated_at": null,
-        "accessIPv4": "1.2.3.4",
-        "accessIPv6": "80fe::",
+        "accessIPv4": "%(access_ip_v4)s",
+        "accessIPv6": "%(access_ip_v6)s",
         "addresses": {
             "private": [
                 {
+                    "addr": "%(ip)s",
                     "OS-EXT-IPS-MAC:mac_addr": "00:0c:29:0d:11:74",
                     "OS-EXT-IPS:type": "fixed",
-                    "addr": "192.168.1.30",
                     "version": 4
                 }
             ]
         },
-        "adminPass": "seekr3t",
-        "config_drive": "",
         "created": "%(isotime)s",
         "description": null,
+        "locked": false,
+        "locked_reason": null,
         "flavor": {
             "disk": 1,
             "ephemeral": 0,
@@ -33,7 +25,7 @@
             "swap": 0,
             "vcpus": 1
         },
-        "hostId": "2091634baaccdc4c5a1d57069c833e402921df696b7f970791b12ec6",
+        "hostId": "%(hostid)s",
         "id": "%(id)s",
         "image": {
             "id": "%(uuid)s",
@@ -42,18 +34,7 @@
                     "href": "%(compute_endpoint)s/images/%(uuid)s",
                     "rel": "bookmark"
                 }
-            ],
-            "properties": {
-                "architecture": "x86_64",
-                "auto_disk_config": "True",
-                "base_image_ref": "%(uuid)s",
-                "container_format": "ova",
-                "disk_format": "vhd",
-                "kernel_id": "nokernel",
-                "min_disk": "1",
-                "min_ram": "0",
-                "ramdisk_id": "nokernel"
-            }
+            ]
         },
         "key_name": null,
         "links": [
@@ -62,17 +43,24 @@
                 "rel": "self"
             },
             {
-                "href": "%(compute_endpoint)s/servers/%(id)s",
+                "href": "%(compute_endpoint)s/servers/%(uuid)s",
                 "rel": "bookmark"
             }
         ],
-        "locked": false,
-        "locked_reason": null,
         "metadata": {
-            "meta_var": "meta_val"
+            "My Server Name": "Apache1"
         },
-        "name": "foobar",
+        "name": "new-server-test",
+        "config_drive": "",
+        "OS-DCF:diskConfig": "AUTO",
+        "OS-EXT-AZ:availability_zone": "us-west",
+        "OS-EXT-SRV-ATTR:hostname": "new-server-hostname.example.com",
+        "OS-EXT-STS:power_state": 1,
+        "OS-EXT-STS:task_state": null,
+        "OS-EXT-STS:vm_state": "active",
         "os-extended-volumes:volumes_attached": [],
+        "OS-SRV-USG:launched_at": "%(strtime)s",
+        "OS-SRV-USG:terminated_at": null,
         "pinned_availability_zone": "us-west",
         "progress": 0,
         "security_groups": [
@@ -86,8 +74,6 @@
         "tenant_id": "6f70656e737461636b20342065766572",
         "trusted_image_certificates": null,
         "updated": "%(isotime)s",
-        "user_data": "ZWNobyAiaGVsbG8gd29ybGQi",
         "user_id": "fake"
     }
 }
-
