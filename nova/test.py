@@ -304,6 +304,7 @@ class TestCase(base.BaseTestCase):
         # make sure that the wsgi app is fully initialized for all testcase
         # instead of only once initialized for test worker
         wsgi_app.init_global_data.reset()
+        wsgi_app.init_application.reset()
 
         # Reset the placement client singleton
         report.PLACEMENTCLIENT = None
@@ -329,8 +330,8 @@ class TestCase(base.BaseTestCase):
         # Reset the global key manager
         nova.crypto._KEYMGR = None
 
-        # Reset the global endpoint
-        nova.limit.utils.ENDPOINT = None
+        # Reset the global identity client
+        nova.limit.utils.IDENTITY_CLIENT = None
 
     def _setup_cells(self):
         """Setup a normal cellsv2 environment.
