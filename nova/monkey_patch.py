@@ -20,8 +20,16 @@
 
 import os
 
+MONKEY_PATCHED = False
+
+
+def is_patched():
+    return MONKEY_PATCHED
+
 
 def _monkey_patch():
+    if is_patched():
+        return
     # NOTE(mdbooth): Anything imported here will not be monkey patched. It is
     # important to take care not to import anything here which requires monkey
     # patching.
@@ -30,10 +38,6 @@ def _monkey_patch():
     import eventlet
     import sys
 
-    # NOTE(mdbooth): Imports only sys (2019-01-30). Other modules imported at
-    # runtime on execution of debugger.init().
-    from nova import debugger
-
     # Note any modules with known monkey-patching issues which have been
     # imported before monkey patching.
     # urllib3: https://bugs.launchpad.net/nova/+bug/1808951
@@ -41,11 +45,7 @@ def _monkey_patch():
     problems = (set(['urllib3', 'oslo_context.context']) &
                 set(sys.modules.keys()))
 
-    if debugger.enabled():
-        # turn off thread patching to enable the remote debugger
-        eventlet.monkey_patch(thread=False)
-    else:
-        eventlet.monkey_patch()
+    eventlet.monkey_patch()
 
     # NOTE(mdbooth): Log here instead of earlier to avoid loading oslo logging
     # before monkey patching.
@@ -69,10 +69,13 @@ def _monkey_patch():
                     ', '.join(problems))
 
 
-# NOTE(mdbooth): This workaround is required to avoid breaking sphinx. See
-# separate comment in doc/source/conf.py. It may also be useful for other
-# non-nova utilities. Ideally the requirement for this workaround will be
-# removed as soon as possible, so do not rely on, or extend it.
-if (os.environ.get('OS_NOVA_DISABLE_EVENTLET_PATCHING', '').lower()
+def patch():
+    # NOTE(mdbooth): This workaround is required to avoid breaking sphinx. See
+    # separate comment in doc/source/conf.py. It may also be useful for other
+    # non-nova utilities. Ideally the requirement for this workaround will be
+    # removed as soon as possible, so do not rely on, or extend it.
+    if (os.environ.get('OS_NOVA_DISABLE_EVENTLET_PATCHING', '').lower()
         not in ('1', 'true', 'yes')):
-    _monkey_patch()
+        _monkey_patch()
+        global MONKEY_PATCHED
+        MONKEY_PATCHED = True
