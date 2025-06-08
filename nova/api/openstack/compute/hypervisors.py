@@ -23,7 +23,7 @@ import webob.exc
 
 from nova.api.openstack import api_version_request
 from nova.api.openstack import common
-from nova.api.openstack.compute.schemas import hypervisors as hyper_schema
+from nova.api.openstack.compute.schemas import hypervisors as schema
 from nova.api.openstack.compute.views import hypervisors as hyper_view
 from nova.api.openstack import wsgi
 from nova.api import validation
@@ -53,8 +53,7 @@ class HypervisorsController(wsgi.Controller):
     ):
         alive = self.servicegroup_api.service_is_up(service)
         # The 2.53 microversion returns the compute node uuid rather than id.
-        uuid_for_id = api_version_request.is_supported(
-            req, min_version="2.53")
+        uuid_for_id = api_version_request.is_supported(req, "2.53")
 
         hyp_dict = {
             'id': hypervisor.uuid if uuid_for_id else hypervisor.id,
@@ -77,9 +76,7 @@ class HypervisorsController(wsgi.Controller):
 
         # The 2.88 microversion removed these fields, so only add them on older
         # microversions
-        if detail and api_version_request.is_supported(
-            req, max_version='2.87',
-        ):
+        if detail and not api_version_request.is_supported(req, '2.88'):
             for field in (
                 'vcpus', 'memory_mb', 'local_gb', 'vcpus_used',
                 'memory_mb_used', 'local_gb_used', 'free_ram_mb',
@@ -88,18 +85,16 @@ class HypervisorsController(wsgi.Controller):
             ):
                 hyp_dict[field] = getattr(hypervisor, field)
 
-            if api_version_request.is_supported(req, max_version='2.27'):
-                hyp_dict['cpu_info'] = hypervisor.cpu_info
-            else:
+            if api_version_request.is_supported(req, '2.28'):
                 if hypervisor.cpu_info:
                     hyp_dict['cpu_info'] = jsonutils.loads(hypervisor.cpu_info)
                 else:
                     hyp_dict['cpu_info'] = {}
+            else:
+                hyp_dict['cpu_info'] = hypervisor.cpu_info
 
         # The 2.88 microversion also *added* the 'uptime' field to the response
-        if detail and api_version_request.is_supported(
-            req, min_version='2.88',
-        ):
+        if detail and api_version_request.is_supported(req, '2.88'):
             try:
                 hyp_dict['uptime'] = self.host_api.get_host_uptime(
                     req.environ['nova.context'], hypervisor.host)
@@ -121,9 +116,7 @@ class HypervisorsController(wsgi.Controller):
         # The 2.75 microversion adds 'servers' field always in response.
         # Empty list if there are no servers on hypervisors and it is
         # requested in request.
-        elif with_servers and api_version_request.is_supported(
-            req, min_version='2.75',
-        ):
+        elif with_servers and api_version_request.is_supported(req, '2.75'):
             hyp_dict['servers'] = []
 
         return hyp_dict
@@ -152,7 +145,7 @@ class HypervisorsController(wsgi.Controller):
         # The 2.53 microversion moves the search and servers routes into
         # GET /os-hypervisors and GET /os-hypervisors/detail with query
         # parameters.
-        if api_version_request.is_supported(req, min_version="2.53"):
+        if api_version_request.is_supported(req, "2.53"):
             hypervisor_match = req.GET.get('hypervisor_hostname_pattern')
             with_servers = strutils.bool_from_string(
                 req.GET.get('with_servers', False), strict=True)
@@ -223,31 +216,29 @@ class HypervisorsController(wsgi.Controller):
                 hypervisors_dict['hypervisors_links'] = hypervisors_links
         return hypervisors_dict
 
-    @wsgi.Controller.api_version("2.53")
-    @wsgi.expected_errors((400, 404))
-    @validation.query_schema(hyper_schema.index_query_v253, "2.53")
+    @wsgi.expected_errors((), '2.1', '2.32')
+    @wsgi.expected_errors(400, '2.33', '2.52')
+    @wsgi.expected_errors((400, 404), '2.53')
+    @validation.query_schema(schema.index_query, '2.1', '2.32')
+    @validation.query_schema(schema.index_query_v233, '2.33', '2.52')
+    @validation.query_schema(schema.index_query_v253, '2.53')
     def index(self, req):
-        """Starting with the 2.53 microversion, the id field in the response
+        """List hypervisors.
+
+        Starting with the 2.53 microversion, the id field in the response
         is the compute_nodes.uuid value. Also, the search and servers routes
         are superseded and replaced with query parameters for listing
         hypervisors by a hostname pattern and whether or not to include
         hosted servers in the response.
         """
-        limit, marker = common.get_limit_and_marker(req)
-        return self._index(req, limit=limit, marker=marker, links=True)
+        limit = None
+        marker = None
+        links = False
+        if api_version_request.is_supported(req, '2.33'):
+            limit, marker = common.get_limit_and_marker(req)
+            links = True
 
-    @wsgi.Controller.api_version("2.33", "2.52")  # noqa
-    @wsgi.expected_errors(400)
-    @validation.query_schema(hyper_schema.index_query_v233)
-    def index(self, req):  # noqa
-        limit, marker = common.get_limit_and_marker(req)
-        return self._index(req, limit=limit, marker=marker, links=True)
-
-    @wsgi.Controller.api_version("2.1", "2.32")  # noqa
-    @wsgi.expected_errors(())
-    @validation.query_schema(hyper_schema.index_query)
-    def index(self, req):  # noqa
-        return self._index(req)
+        return self._index(req, limit=limit, marker=marker, links=links)
 
     def _index(self, req, limit=None, marker=None, links=False):
         context = req.environ['nova.context']
@@ -255,31 +246,29 @@ class HypervisorsController(wsgi.Controller):
         return self._get_hypervisors(req, detail=False, limit=limit,
                                      marker=marker, links=links)
 
-    @wsgi.Controller.api_version("2.53")
-    @wsgi.expected_errors((400, 404))
-    @validation.query_schema(hyper_schema.index_query_v253, "2.53")
+    @wsgi.expected_errors((), '2.1', '2.32')
+    @wsgi.expected_errors((400), '2.33', '2.52')
+    @wsgi.expected_errors((400, 404), '2.53')
+    @validation.query_schema(schema.index_query, '2.1', '2.32')
+    @validation.query_schema(schema.index_query_v233, '2.33', '2.52')
+    @validation.query_schema(schema.index_query_v253, '2.53')
     def detail(self, req):
-        """Starting with the 2.53 microversion, the id field in the response
+        """List hypervisors with extra details.
+
+        Starting with the 2.53 microversion, the id field in the response
         is the compute_nodes.uuid value. Also, the search and servers routes
         are superseded and replaced with query parameters for listing
         hypervisors by a hostname pattern and whether or not to include
         hosted servers in the response.
         """
-        limit, marker = common.get_limit_and_marker(req)
-        return self._detail(req, limit=limit, marker=marker, links=True)
+        limit = None
+        marker = None
+        links = False
+        if api_version_request.is_supported(req, '2.33'):
+            limit, marker = common.get_limit_and_marker(req)
+            links = True
 
-    @wsgi.Controller.api_version("2.33", "2.52")  # noqa
-    @wsgi.expected_errors((400))
-    @validation.query_schema(hyper_schema.index_query_v233)
-    def detail(self, req):  # noqa
-        limit, marker = common.get_limit_and_marker(req)
-        return self._detail(req, limit=limit, marker=marker, links=True)
-
-    @wsgi.Controller.api_version("2.1", "2.32")  # noqa
-    @wsgi.expected_errors(())
-    @validation.query_schema(hyper_schema.index_query)
-    def detail(self, req):  # noqa
-        return self._detail(req)
+        return self._detail(req, limit=limit, marker=marker, links=links)
 
     def _detail(self, req, limit=None, marker=None, links=False):
         context = req.environ['nova.context']
@@ -299,7 +288,7 @@ class HypervisorsController(wsgi.Controller):
         :raises: webob.exc.HTTPNotFound if the requested microversion is
             less than 2.53 and the id is not an integer.
         """
-        if api_version_request.is_supported(req, min_version="2.53"):
+        if api_version_request.is_supported(req, "2.53"):
             if not uuidutils.is_uuid_like(hypervisor_id):
                 msg = _('Invalid uuid %s') % hypervisor_id
                 raise webob.exc.HTTPBadRequest(explanation=msg)
@@ -311,25 +300,25 @@ class HypervisorsController(wsgi.Controller):
                        hypervisor_id)
                 raise webob.exc.HTTPNotFound(explanation=msg)
 
-    @wsgi.Controller.api_version("2.53")
-    @wsgi.expected_errors((400, 404))
-    @validation.query_schema(hyper_schema.show_query_v253, "2.53")
+    @wsgi.expected_errors(404, '2.1', '2.52')
+    @wsgi.expected_errors((400, 404), '2.53')
+    @validation.query_schema(schema.show_query, '2.1', '2.52')
+    @validation.query_schema(schema.show_query_v253, '2.53')
     def show(self, req, id):
-        """The 2.53 microversion requires that the id is a uuid and as a result
+        """Show a hypervisor.
+
+        The 2.53 microversion requires that the id is a uuid and as a result
         it can also return a 400 response if an invalid uuid is passed.
 
         The 2.53 microversion also supports the with_servers query parameter
         to include a list of servers on the given hypervisor if requested.
         """
-        with_servers = strutils.bool_from_string(
-            req.GET.get('with_servers', False), strict=True)
-        return self._show(req, id, with_servers)
+        with_servers = False
+        if api_version_request.is_supported(req, '2.53'):
+            with_servers = strutils.bool_from_string(
+                req.GET.get('with_servers', False), strict=True)
 
-    @wsgi.Controller.api_version("2.1", "2.52")     # noqa F811
-    @wsgi.expected_errors(404)
-    @validation.query_schema(hyper_schema.show_query)
-    def show(self, req, id):  # noqa
-        return self._show(req, id)
+        return self._show(req, id, with_servers=with_servers)
 
     def _show(self, req, id, with_servers=False):
         context = req.environ['nova.context']
@@ -370,9 +359,9 @@ class HypervisorsController(wsgi.Controller):
             ),
         }
 
-    @wsgi.Controller.api_version('2.1', '2.87')
+    @wsgi.api_version('2.1', '2.87')
     @wsgi.expected_errors((400, 404, 501))
-    @validation.query_schema(hyper_schema.uptime_query)
+    @validation.query_schema(schema.uptime_query)
     def uptime(self, req, id):
         """Prior to microversion 2.88, you could retrieve a special version of
         the hypervisor detail view that included uptime. Starting in 2.88, this
@@ -423,9 +412,9 @@ class HypervisorsController(wsgi.Controller):
 
         return {'hypervisor': hypervisor}
 
-    @wsgi.Controller.api_version('2.1', '2.52')
+    @wsgi.api_version('2.1', '2.52')
     @wsgi.expected_errors(404)
-    @validation.query_schema(hyper_schema.search_query)
+    @validation.query_schema(schema.search_query)
     def search(self, req, id):
         """Prior to microversion 2.53 you could search for hypervisors by a
         hostname pattern on a dedicated route. Starting with 2.53, searching
@@ -462,9 +451,9 @@ class HypervisorsController(wsgi.Controller):
 
         return {'hypervisors': hypervisors}
 
-    @wsgi.Controller.api_version('2.1', '2.52')
+    @wsgi.api_version('2.1', '2.52')
     @wsgi.expected_errors(404)
-    @validation.query_schema(hyper_schema.servers_query)
+    @validation.query_schema(schema.servers_query)
     def servers(self, req, id):
         """Prior to microversion 2.53 you could search for hypervisors by a
         hostname pattern and include servers on those hosts in the response on
@@ -508,9 +497,9 @@ class HypervisorsController(wsgi.Controller):
 
         return {'hypervisors': hypervisors}
 
-    @wsgi.Controller.api_version('2.1', '2.87')
+    @wsgi.api_version('2.1', '2.87')
     @wsgi.expected_errors(())
-    @validation.query_schema(hyper_schema.statistics_query)
+    @validation.query_schema(schema.statistics_query)
     def statistics(self, req):
         """Prior to microversion 2.88, you could get statistics for the
         hypervisor. Most of these are now accessible from placement and the few

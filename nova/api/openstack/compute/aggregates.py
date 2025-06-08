@@ -274,7 +274,7 @@ class AggregateController(wsgi.Controller):
         return {"aggregate": _aggregate}
 
     def _build_aggregate_items(self, req, aggregate):
-        show_uuid = api_version_request.is_supported(req, min_version="2.41")
+        show_uuid = api_version_request.is_supported(req, "2.41")
         keys = aggregate.obj_fields
         # NOTE(rlrossit): Within the compute API, metadata will always be
         # set on the aggregate object (at a minimum to {}). Because of this,
@@ -287,7 +287,7 @@ class AggregateController(wsgi.Controller):
                     (show_uuid or key != 'uuid')):
                 yield key, getattr(aggregate, key)
 
-    @wsgi.Controller.api_version('2.81')
+    @wsgi.api_version('2.81')
     @wsgi.response(202)
     @wsgi.expected_errors((400, 404))
     @validation.schema(aggregate_images.aggregate_images)

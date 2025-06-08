@@ -11,10 +11,13 @@
 # under the License.
 
 import jsonschema.exceptions
+from oslo_log import log as logging
 
 from nova.api.openstack import compute
 from nova.api.validation import validators
 from nova import test
+
+LOG = logging.getLogger(__name__)
 
 
 class SchemaTest(test.NoDBTestCase):
@@ -32,30 +35,48 @@ class SchemaTest(test.NoDBTestCase):
         def _validate_func(func, method):
             if method in ("POST", "PUT", "PATCH"):
                 # request body validation
-                if not hasattr(func, '_request_schema'):
+                if not hasattr(func, 'request_body_schemas'):
                     missing_request_schemas.add(func.__qualname__)
                 else:
-                    try:
-                        self.meta_schema.check_schema(func._request_schema)
-                    except jsonschema.exceptions.SchemaError:
-                        invalid_schemas.add(func.__qualname__)
+                    for schema, _, _ in func.request_body_schemas._schemas:
+                        try:
+                            self.meta_schema.check_schema(schema)
+                        except jsonschema.exceptions.SchemaError:
+                            LOG.exception(
+                                "Invalid request body schema for %s",
+                                func.__qualname__,
+                            )
+                            invalid_schemas.add(func.__qualname__)
+                            break
             elif method in ("GET",):
                 # request query string validation
-                if not hasattr(func, '_query_schema'):
-                    missing_query_schemas.add(func.__qualname__)
+                if not hasattr(func, 'request_query_schemas'):
+                    missing_request_schemas.add(func.__qualname__)
                 else:
-                    try:
-                        self.meta_schema.check_schema(func._query_schema)
-                    except jsonschema.exceptions.SchemaError:
-                        invalid_schemas.add(func.__qualname__)
+                    for schema, _, _ in func.request_query_schemas._schemas:
+                        try:
+                            self.meta_schema.check_schema(schema)
+                        except jsonschema.exceptions.SchemaError:
+                            LOG.exception(
+                                "Invalid request query schema for %s",
+                                func.__qualname__,
+                            )
+                            invalid_schemas.add(func.__qualname__)
+                            break
 
             # TODO(stephenfin): Check for missing schemas once we have added
             # them all
-            if hasattr(func, '_response_schema'):
-                try:
-                    self.meta_schema.check_schema(func._response_schema)
-                except jsonschema.exceptions.SchemaError:
-                    invalid_schemas.add(func.__qualname__)
+            if hasattr(func, 'response_body_schemas'):
+                for schema, _, _ in func.response_body_schemas._schemas:
+                    try:
+                        self.meta_schema.check_schema(schema)
+                    except jsonschema.exceptions.SchemaError:
+                        LOG.exception(
+                            "Invalid response body schema for %s",
+                            func.__qualname__,
+                        )
+                        invalid_schemas.add(func.__qualname__)
+                        break
 
         for route in self.router.map.matchlist:
             if 'controller' not in route.defaults:
@@ -95,37 +116,12 @@ class SchemaTest(test.NoDBTestCase):
                     wsgi_action, wsgi_method, action_controller
                 ) in wsgi_actions:
                     func = controller.wsgi_actions[wsgi_action]
-
-                    if hasattr(action_controller, 'versioned_methods'):
-                        if wsgi_method in action_controller.versioned_methods:
-                            # currently all our actions are unversioned and if
-                            # this changes then we need to fix this
-                            funcs = action_controller.versioned_methods[
-                                wsgi_method
-                            ]
-                            assert len(funcs) == 1
-                            func = funcs[0].func
-
                     # method will always be POST for actions
                     _validate_func(func, method)
             else:
                 # body validation
-                versioned_methods = getattr(
-                    controller.controller, 'versioned_methods', {}
-                )
-                if action in versioned_methods:
-                    # versioned method
-                    for versioned_method in sorted(
-                        versioned_methods[action],
-                        key=lambda v: v.start_version
-                    ):
-                        func = versioned_method.func
-
-                        _validate_func(func, method)
-                else:
-                    # unversioned method
-                    func = getattr(controller.controller, action)
-                    _validate_func(func, method)
+                func = getattr(controller.controller, action)
+                _validate_func(func, method)
 
         if missing_request_schemas:
             raise test.TestingException(
