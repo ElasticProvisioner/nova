@@ -37,6 +37,7 @@ from nova import utils
 LOG = logging.getLogger(__name__)
 
 
+@validation.validated
 class HypervisorsController(wsgi.Controller):
     """The Hypervisors API controller for the OpenStack API."""
 
@@ -222,6 +223,9 @@ class HypervisorsController(wsgi.Controller):
     @validation.query_schema(schema.index_query, '2.1', '2.32')
     @validation.query_schema(schema.index_query_v233, '2.33', '2.52')
     @validation.query_schema(schema.index_query_v253, '2.53')
+    @validation.response_body_schema(schema.index_response, '2.1', '2.32')
+    @validation.response_body_schema(schema.index_response_v233, '2.33', '2.52')  # noqa: E501
+    @validation.response_body_schema(schema.index_response_v253, '2.53')
     def index(self, req):
         """List hypervisors.
 
@@ -252,6 +256,11 @@ class HypervisorsController(wsgi.Controller):
     @validation.query_schema(schema.index_query, '2.1', '2.32')
     @validation.query_schema(schema.index_query_v233, '2.33', '2.52')
     @validation.query_schema(schema.index_query_v253, '2.53')
+    @validation.response_body_schema(schema.detail_response, '2.1', '2.27')
+    @validation.response_body_schema(schema.detail_response_v228, '2.28', '2.32')  # noqa: E501
+    @validation.response_body_schema(schema.detail_response_v233, '2.33', '2.52')  # noqa: E501
+    @validation.response_body_schema(schema.detail_response_v253, '2.53', '2.87')  # noqa: E501
+    @validation.response_body_schema(schema.detail_response_v288, '2.88')
     def detail(self, req):
         """List hypervisors with extra details.
 
@@ -304,6 +313,10 @@ class HypervisorsController(wsgi.Controller):
     @wsgi.expected_errors((400, 404), '2.53')
     @validation.query_schema(schema.show_query, '2.1', '2.52')
     @validation.query_schema(schema.show_query_v253, '2.53')
+    @validation.response_body_schema(schema.show_response, '2.1', '2.27')
+    @validation.response_body_schema(schema.show_response_v228, '2.28', '2.52')
+    @validation.response_body_schema(schema.show_response_v253, '2.53', '2.87')
+    @validation.response_body_schema(schema.show_response_v288, '2.88')
     def show(self, req, id):
         """Show a hypervisor.
 
@@ -362,6 +375,8 @@ class HypervisorsController(wsgi.Controller):
     @wsgi.api_version('2.1', '2.87')
     @wsgi.expected_errors((400, 404, 501))
     @validation.query_schema(schema.uptime_query)
+    @validation.response_body_schema(schema.uptime_response, '2.1', '2.52')
+    @validation.response_body_schema(schema.uptime_response_v253, '2.53', '2.87')  # noqa: E501
     def uptime(self, req, id):
         """Prior to microversion 2.88, you could retrieve a special version of
         the hypervisor detail view that included uptime. Starting in 2.88, this
@@ -415,6 +430,7 @@ class HypervisorsController(wsgi.Controller):
     @wsgi.api_version('2.1', '2.52')
     @wsgi.expected_errors(404)
     @validation.query_schema(schema.search_query)
+    @validation.response_body_schema(schema.search_response, '2.1', '2.52')
     def search(self, req, id):
         """Prior to microversion 2.53 you could search for hypervisors by a
         hostname pattern on a dedicated route. Starting with 2.53, searching
@@ -454,6 +470,7 @@ class HypervisorsController(wsgi.Controller):
     @wsgi.api_version('2.1', '2.52')
     @wsgi.expected_errors(404)
     @validation.query_schema(schema.servers_query)
+    @validation.response_body_schema(schema.servers_response, '2.1', '2.52')
     def servers(self, req, id):
         """Prior to microversion 2.53 you could search for hypervisors by a
         hostname pattern and include servers on those hosts in the response on
@@ -471,8 +488,8 @@ class HypervisorsController(wsgi.Controller):
         hypervisors = []
         for compute_node in compute_nodes:
             try:
-                instances = self.host_api.instance_get_all_by_host(context,
-                    compute_node.host)
+                instances = self.host_api.instance_get_all_by_host(
+                    context, compute_node.host)
             except exception.HostMappingNotFound as e:
                 raise webob.exc.HTTPNotFound(explanation=e.format_message())
 
@@ -500,6 +517,7 @@ class HypervisorsController(wsgi.Controller):
     @wsgi.api_version('2.1', '2.87')
     @wsgi.expected_errors(())
     @validation.query_schema(schema.statistics_query)
+    @validation.response_body_schema(schema.statistics_response, '2.1', '2.87')
     def statistics(self, req):
         """Prior to microversion 2.88, you could get statistics for the
         hypervisor. Most of these are now accessible from placement and the few
@@ -508,4 +526,4 @@ class HypervisorsController(wsgi.Controller):
         context = req.environ['nova.context']
         context.can(hv_policies.BASE_POLICY_NAME % 'statistics', target={})
         stats = self.host_api.compute_node_statistics(context)
-        return dict(hypervisor_statistics=stats)
+        return {'hypervisor_statistics': stats}
