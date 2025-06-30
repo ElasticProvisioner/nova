@@ -27,6 +27,7 @@ from unittest import mock
 from castellan import key_manager
 from cinderclient import exceptions as cinder_exception
 import ddt
+import futurist
 from keystoneclient import exceptions as keystone_exception
 from neutronclient.common import exceptions as neutron_exceptions
 from oslo_log import log as logging
@@ -1659,11 +1660,8 @@ class ComputeTestCase(BaseTestCase,
                       test_diagnostics.DiagnosticsComparisonMixin,
                       fake_resource_tracker.RTMockMixin):
     def setUp(self):
-        # This needs to go before we call setUp because the thread pool
-        # executor is created in ComputeManager.__init__, which is called
-        # during setUp.
-        self.useFixture(fixtures.SynchronousThreadPoolExecutorFixture())
         super(ComputeTestCase, self).setUp()
+        self.compute._live_migration_executor = futurist.SynchronousExecutor()
         self.useFixture(fixtures.SpawnIsSynchronousFixture())
 
         self.image_api = image_api.API()
@@ -14506,10 +14504,12 @@ class ComputeInjectedFilesTestCase(BaseTestCase):
         ]
 
         self.assertRaises(exception.Base64Exception,
-                self.compute.build_and_run_instance,
-                self.context, self.instance, {}, {}, {}, [],
-                          block_device_mapping=[],
-                          injected_files=injected_files)
+            self.compute._do_build_and_run_instance,
+            self.context, self.instance, {}, {}, {},
+            block_device_mapping=[], injected_files=injected_files,
+            admin_password=None, requested_networks=None,
+            security_groups=None, node=None, limits=None, host_list=None,
+            accel_uuids=[])
 
 
 class CheckConfigDriveTestCase(test.NoDBTestCase):
