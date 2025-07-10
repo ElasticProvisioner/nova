@@ -1208,15 +1208,16 @@ class IsolatedGreenPoolFixture(fixtures.Fixture):
 
         def _get_default_green_pool():
             self.greenpool = origi_default_green_pool()
+            self.greenpool.name = f"{self.test_case_id}.default"
             return self.greenpool
-        # NOTE(sean-k-mooney): greenpools use eventlet.spawn and
-        # eventlet.spawn_n so we can't stub out all calls to those functions.
+        # NOTE(sean-k-mooney): greenpools use eventlet.spawn so we can't stub
+        # out all calls to those functions.
         # Instead since nova only creates greenthreads directly via nova.utils
         # we stub out the default green pool. This will not capture
         # Greenthreads created via the standard lib threading module.
         self.useFixture(fixtures.MonkeyPatch(
             'nova.utils._get_default_green_pool', _get_default_green_pool))
-        self.addCleanup(self.do_cleanup_default)
+        self.addCleanup(lambda: self.do_cleanup_executor(self.greenpool))
 
         def _get_scatter_gather_executor():
             self.scatter_gather_executor = origi_get_scatter_gather()
@@ -1228,11 +1229,16 @@ class IsolatedGreenPoolFixture(fixtures.Fixture):
             'nova.utils.get_scatter_gather_executor',
             _get_scatter_gather_executor))
 
-        self.addCleanup(self.do_cleanup_scatter_gather)
+        self.addCleanup(
+            lambda: self.do_cleanup_executor(self.scatter_gather_executor))
 
-    def do_cleanup_scatter_gather(self):
+        self.addCleanup(self.reset_globals)
+
+    def reset_globals(self):
         utils.SCATTER_GATHER_EXECUTOR = None
-        executor = self.scatter_gather_executor
+        utils.DEFAULT_GREEN_POOL = None
+
+    def do_cleanup_executor(self, executor):
         # NOTE(gibi): we cannot rely on utils.concurrency_mode_threading
         # as that might have been mocked during the test when the executor
         # was created, but during cleanup the mock is already removed.
@@ -1283,23 +1289,12 @@ class IsolatedGreenPoolFixture(fixtures.Fixture):
                 'finished.'
                 'They cannot be killed so they may interact with '
                 'other tests if they raise exceptions. '
-                'These greenlets were likely created by spawn_n and'
+                'These greenlets were likely created by spawn and'
                 'and therefore are not expected to return or raise.'
             )
 
-    def do_cleanup_default(self):
-        if self.greenpool and self.greenpool.running:
-            # kill all greenthreads in the pool before raising to prevent
-            # them from interfering with other tests.
-            for gt in list(self.greenpool.coroutines_running):
-                if isinstance(gt, eventlet.greenthread.GreenThread):
-                    gt.kill()
-            # reset the global greenpool just in case.
-            utils.DEFAULT_GREEN_POOL = None
-            self._raise_on_green_pool(self.greenpool)
 
-
-class _FakeGreenThread(object):
+class _FakeFuture(object):
     def __init__(self, func, *args, **kwargs):
         try:
             self._result = func(*args, **kwargs)
@@ -1313,20 +1308,10 @@ class _FakeGreenThread(object):
         # defined to satisfy the interface.
         pass
 
-    def kill(self, *args, **kwargs):
-        # This method doesn't make sense for a synchronous call, it's just
-        # defined to satisfy the interface.
-        pass
+    def add_done_callback(self, func):
+        func(self)
 
-    def link(self, func, *args, **kwargs):
-        func(self, *args, **kwargs)
-
-    def unlink(self, func, *args, **kwargs):
-        # This method doesn't make sense for a synchronous call, it's just
-        # defined to satisfy the interface.
-        pass
-
-    def wait(self):
+    def result(self):
         if self.raised:
             raise self._result
 
@@ -1334,14 +1319,12 @@ class _FakeGreenThread(object):
 
 
 class SpawnIsSynchronousFixture(fixtures.Fixture):
-    """Patch and restore the spawn_n utility method to be synchronous"""
+    """Patch and restore the spawn_* utility methods to be synchronous"""
 
     def setUp(self):
         super(SpawnIsSynchronousFixture, self).setUp()
         self.useFixture(fixtures.MonkeyPatch(
-            'nova.utils.spawn_n', _FakeGreenThread))
-        self.useFixture(fixtures.MonkeyPatch(
-            'nova.utils.spawn', _FakeGreenThread))
+            'nova.utils.spawn', _FakeFuture))
 
 
 class BannedDBSchemaOperations(fixtures.Fixture):
@@ -1880,7 +1863,7 @@ class PropagateTestCaseIdToChildEventlets(fixtures.Fixture):
             # propagation
             caller = eventlet.getcurrent()
             # If there is no id set on us that means we were spawned with other
-            # than nova.utils.spawn or spawn_n so the id propagation chain got
+            # than nova.utils.spawn so the id propagation chain got
             # broken. We fall back to self.test_case_id from the fixture which
             # is good enough
             caller_test_case_id = getattr(
@@ -1902,37 +1885,6 @@ class PropagateTestCaseIdToChildEventlets(fixtures.Fixture):
         # our initialization to the child eventlet
         self.useFixture(
             fixtures.MonkeyPatch('nova.utils.spawn', wrapped_spawn))
-
-        # now do the same with spawn_n
-        orig_spawn_n = utils.spawn_n
-
-        def wrapped_spawn_n(func, *args, **kwargs):
-            # This is still runs before the eventlet.spawn so read the id for
-            # propagation
-            caller = eventlet.getcurrent()
-            # If there is no id set on us that means we were spawned with other
-            # than nova.utils.spawn or spawn_n so the id propagation chain got
-            # broken. We fall back to self.test_case_id from the fixture which
-            # is good enough
-            caller_test_case_id = getattr(
-                caller, 'test_case_id', None) or self.test_case_id
-
-            @functools.wraps(func)
-            def test_case_id_wrapper(*args, **kwargs):
-                # This runs after the eventlet.spawn in the new child.
-                # Propagate the id from our caller eventlet
-                current = eventlet.getcurrent()
-                current.test_case_id = caller_test_case_id
-                return func(*args, **kwargs)
-
-            # call the original spawn_n to create the child but with our
-            # new wrapper around its target
-            return orig_spawn_n(test_case_id_wrapper, *args, **kwargs)
-
-        # let's replace nova.utils.spawn_n with the wrapped one that injects
-        # our initialization to the child eventlet
-        self.useFixture(
-            fixtures.MonkeyPatch('nova.utils.spawn_n', wrapped_spawn_n))
 
 
 class ReaderWriterLock(lockutils.ReaderWriterLock):

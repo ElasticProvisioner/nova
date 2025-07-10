@@ -755,13 +755,12 @@ class SafeTruncateTestCase(test.NoDBTestCase):
         self.assertEqual(254, len(byte_message))
 
 
-class SpawnNTestCase(test.NoDBTestCase):
+class SpawnTestCase(test.NoDBTestCase):
     def setUp(self):
-        super(SpawnNTestCase, self).setUp()
+        super(SpawnTestCase, self).setUp()
         self.useFixture(context_fixture.ClearRequestContext())
-        self.spawn_name = 'spawn_n'
 
-    def test_spawn_n_no_context(self):
+    def test_spawn_no_context(self):
         self.assertIsNone(common_context.get_current())
 
         def _fake_spawn(func, *args, **kwargs):
@@ -772,11 +771,11 @@ class SpawnNTestCase(test.NoDBTestCase):
         def fake(arg):
             pass
         pool = utils._get_default_green_pool()
-        with mock.patch.object(pool, self.spawn_name, _fake_spawn):
-            getattr(utils, self.spawn_name)(fake, 'test')
+        with mock.patch.object(pool, "submit", _fake_spawn):
+            getattr(utils, "spawn")(fake, 'test')
         self.assertIsNone(common_context.get_current())
 
-    def test_spawn_n_context(self):
+    def test_spawn_context(self):
         self.assertIsNone(common_context.get_current())
         ctxt = context.RequestContext('user', 'project')
 
@@ -790,11 +789,11 @@ class SpawnNTestCase(test.NoDBTestCase):
             pass
 
         pool = utils._get_default_green_pool()
-        with mock.patch.object(pool, self.spawn_name, _fake_spawn):
-            getattr(utils, self.spawn_name)(fake, ctxt, kwarg1='test')
+        with mock.patch.object(pool, "submit", _fake_spawn):
+            getattr(utils, "spawn")(fake, ctxt, kwarg1='test')
         self.assertEqual(ctxt, common_context.get_current())
 
-    def test_spawn_n_context_different_from_passed(self):
+    def test_spawn_context_different_from_passed(self):
         self.assertIsNone(common_context.get_current())
         ctxt = context.RequestContext('user', 'project')
         ctxt_passed = context.RequestContext('user', 'project',
@@ -811,15 +810,9 @@ class SpawnNTestCase(test.NoDBTestCase):
             pass
 
         pool = utils._get_default_green_pool()
-        with mock.patch.object(pool, self.spawn_name, _fake_spawn):
-            getattr(utils, self.spawn_name)(fake, ctxt_passed, kwarg1='test')
+        with mock.patch.object(pool, "submit", _fake_spawn):
+            getattr(utils, "spawn")(fake, ctxt_passed, kwarg1='test')
         self.assertEqual(ctxt, common_context.get_current())
-
-
-class SpawnTestCase(SpawnNTestCase):
-    def setUp(self):
-        super(SpawnTestCase, self).setUp()
-        self.spawn_name = 'spawn'
 
 
 class UT8TestCase(test.NoDBTestCase):
@@ -1458,8 +1451,11 @@ class LatchErrorOnRaiseTests(test.NoDBTestCase):
 class ScatterGatherExecutorTestCase(test.NoDBTestCase):
     def test_executor_is_named(self):
         executor = utils.get_scatter_gather_executor()
-        # NOTE(gibi): during test we use a test-case-specific name, outside
-        # of test we use process name specific name instead.
+        # NOTE(gibi): The executor is name both in normal run and in the test
+        # env. During testing we use a test-case-specific name, outside
+        # of test we use process name specific name instead. The test case
+        # specific name is added to help troubleshooting leaked executors
+        # between test case.
         self.assertRegex(executor.name,
             "nova.tests.unit.test_utils.ScatterGatherExecutor.*"
             "test_executor_is_named.cell_worker")
@@ -1486,4 +1482,32 @@ class ScatterGatherExecutorTestCase(test.NoDBTestCase):
 
         utils.destroy_scatter_gather_executor()
         self.assertIsNone(utils.SCATTER_GATHER_EXECUTOR)
+        self.assertFalse(executor.alive)
+
+
+class DefaultExecutorTestCase(test.NoDBTestCase):
+    def test_executor_is_named(self):
+        executor = utils._get_default_green_pool()
+        # NOTE(gibi): The executor is name both in normal run and in the test
+        # env. During testing we use a test-case-specific name, outside
+        # of test we use process name specific name instead. The test case
+        # specific name is added to help troubleshooting leaked executors
+        # between test case.
+        self.assertRegex(executor.name,
+            "nova.tests.unit.test_utils.DefaultExecutor.*"
+            "test_executor_is_named.default")
+
+    @mock.patch.object(
+        utils, 'concurrency_mode_threading', new=mock.Mock(return_value=False))
+    def test_executor_type_eventlet(self):
+        executor = utils._get_default_green_pool()
+
+        self.assertEqual('GreenThreadPoolExecutor', type(executor).__name__)
+
+    def test_executor_destroy(self):
+        executor = utils._get_default_green_pool()
+        self.assertIsNotNone(utils.DEFAULT_GREEN_POOL)
+
+        utils.destroy_default_green_pool()
+        self.assertIsNone(utils.DEFAULT_GREEN_POOL)
         self.assertFalse(executor.alive)

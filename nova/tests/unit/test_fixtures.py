@@ -278,56 +278,34 @@ class TestIndirectionAPIFixture(testtools.TestCase):
 
 class TestSpawnIsSynchronousFixture(testtools.TestCase):
     def test_spawn_patch(self):
-        orig_spawn = utils.spawn_n
+        orig_spawn = utils.spawn
 
         fix = fixtures.SpawnIsSynchronousFixture()
         self.useFixture(fix)
-        self.assertNotEqual(orig_spawn, utils.spawn_n)
+        self.assertNotEqual(orig_spawn, utils.spawn)
 
     def test_spawn_passes_through(self):
         self.useFixture(fixtures.SpawnIsSynchronousFixture())
         tester = mock.MagicMock()
-        utils.spawn_n(tester.function, 'foo', bar='bar')
+        utils.spawn(tester.function, 'foo', bar='bar')
         tester.function.assert_called_once_with('foo', bar='bar')
 
-    def test_spawn_return_has_wait(self):
+    def test_spawn_return_has_result(self):
         self.useFixture(fixtures.SpawnIsSynchronousFixture())
-        gt = utils.spawn(lambda x: '%s' % x, 'foo')
-        foo = gt.wait()
+        future = utils.spawn(lambda x: '%s' % x, 'foo')
+        foo = future.result()
         self.assertEqual('foo', foo)
 
-    def test_spawn_n_return_has_wait(self):
+    def test_spawn_callback(self):
         self.useFixture(fixtures.SpawnIsSynchronousFixture())
-        gt = utils.spawn_n(lambda x: '%s' % x, 'foo')
-        foo = gt.wait()
-        self.assertEqual('foo', foo)
-
-    def test_spawn_has_link(self):
-        self.useFixture(fixtures.SpawnIsSynchronousFixture())
-        gt = utils.spawn(mock.MagicMock)
-        passed_arg = 'test'
+        future = utils.spawn(mock.MagicMock)
         call_count = []
 
-        def fake(thread, param):
-            self.assertEqual(gt, thread)
-            self.assertEqual(passed_arg, param)
+        def fake(thread):
+            self.assertEqual(future, thread)
             call_count.append(1)
 
-        gt.link(fake, passed_arg)
-        self.assertEqual(1, len(call_count))
-
-    def test_spawn_n_has_link(self):
-        self.useFixture(fixtures.SpawnIsSynchronousFixture())
-        gt = utils.spawn_n(mock.MagicMock)
-        passed_arg = 'test'
-        call_count = []
-
-        def fake(thread, param):
-            self.assertEqual(gt, thread)
-            self.assertEqual(passed_arg, param)
-            call_count.append(1)
-
-        gt.link(fake, passed_arg)
+        future.add_done_callback(fake)
         self.assertEqual(1, len(call_count))
 
 
