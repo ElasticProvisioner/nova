@@ -31,6 +31,7 @@ TEST_IMAGE_UUID = "cccccccc-cccc-cccc-cccc-cccccccccccc"
 TEST_IMAGE_NAME = "test-image"
 TEST_FLAVOR_ID = 1
 TEST_FLAVOR_NAME = "fake.flavor"
+TEST_FLAVOR_FLAVORID = "iiiiiiii-iiii-iiii-iiii-iiiiiiiiiiii"
 TEST_FLAVOR_EXTRA_SPECS = {
     'baremetal:deploy_kernel_id': 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     'baremetal:deploy_ramdisk_id': 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'}
@@ -223,9 +224,15 @@ def get_test_instance_driver_metadata(**kw):
         projectname='testproject')
     default_image_meta = driver.ImageMeta(id=TEST_IMAGE_UUID,
                                           name=TEST_IMAGE_NAME,
+                                          container_format=None,
+                                          disk_format=None,
+                                          min_disk=None,
+                                          min_ram=None,
                                           properties={})
     default_flavor_meta = driver.FlavorMeta(
                              name=kw.get('flavor_name', TEST_FLAVOR_NAME),
+                             flavorid=kw.get('flavor_flavorid',
+                                             TEST_FLAVOR_FLAVORID),
                              memory_mb=kw.get('flavor_memorymb',
                                               TEST_FLAVOR_MEMORYMB),
                              vcpus=kw.get('flavor_vcpus', TEST_FLAVOR_VCPUS),

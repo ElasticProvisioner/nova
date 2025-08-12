@@ -6241,6 +6241,13 @@ class LibvirtDriver(driver.ComputeDriver):
         meta.roottype = dmeta.root_type
         meta.rootid = dmeta.root_id
 
+        # Always set the image meta, even when booting from volume
+        # as volumes can contain image meta as well.
+        imeta = vconfig.LibvirtConfigGuestMetaImage()
+        imeta.uuid = meta.rootid
+        imeta.image_meta = dmeta.image
+        meta.image = imeta
+
         ometa = vconfig.LibvirtConfigGuestMetaNovaOwner()
         ometa.userid = dmeta.owner.userid
         ometa.username = dmeta.owner.username
@@ -6250,11 +6257,13 @@ class LibvirtDriver(driver.ComputeDriver):
 
         fmeta = vconfig.LibvirtConfigGuestMetaNovaFlavor()
         fmeta.name = dmeta.flavor.name
+        fmeta.id = dmeta.flavor.flavorid
         fmeta.memory = dmeta.flavor.memory_mb
         fmeta.vcpus = dmeta.flavor.vcpus
         fmeta.ephemeral = dmeta.flavor.ephemeral_gb
         fmeta.disk = dmeta.flavor.root_gb
         fmeta.swap = dmeta.flavor.swap
+        fmeta.extra_specs = dmeta.flavor.extra_specs
 
         meta.flavor = fmeta
 
@@ -11396,7 +11405,7 @@ class LibvirtDriver(driver.ComputeDriver):
                 # cancel migration job.
                 self.live_migration_abort(instance)
             except libvirt.libvirtError:
-                LOG.warning("Error occurred when trying to abort live ",
+                LOG.warning("Error occurred when trying to abort live "
                             "migration job, ignoring it.", instance=instance)
             raise
         finally:

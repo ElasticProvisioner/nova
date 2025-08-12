@@ -49,6 +49,7 @@ LOG = logging.getLogger(__name__)
 @dataclasses.dataclass
 class FlavorMeta:
     name: str
+    flavorid: str
     memory_mb: int
     vcpus: int
     root_gb: int
@@ -61,7 +62,38 @@ class FlavorMeta:
 class ImageMeta:
     id: str
     name: str
+    container_format: str | None
+    disk_format: str | None
+    min_disk: int | None
+    min_ram: int | None
     properties: dict
+
+    @staticmethod
+    def from_instance(
+        instance: 'nova.objects.instance.Instance',
+    ) -> 'ImageMeta':
+        image_meta = instance.image_meta
+        return ImageMeta(
+            id=instance.image_ref,
+            name=instance.system_metadata.get('image_name'),
+            container_format=(
+                image_meta.container_format
+                if image_meta.obj_attr_is_set('container_format')
+                else None),
+            disk_format=(
+                image_meta.disk_format
+                if image_meta.obj_attr_is_set('disk_format')
+                else None),
+            min_disk=(
+                image_meta.min_disk
+                if image_meta.obj_attr_is_set('min_disk')
+                else None),
+            min_ram=(
+                image_meta.min_ram
+                if image_meta.obj_attr_is_set('min_ram')
+                else None),
+            properties=image_meta.properties.to_dict(),
+        )
 
 
 @dataclasses.dataclass
@@ -376,6 +408,7 @@ class ComputeDriver(object):
         )
         flavor = FlavorMeta(
             name=instance.flavor.name,
+            flavorid=instance.flavor.flavorid,
             memory_mb=instance.flavor.memory_mb,
             vcpus=instance.flavor.vcpus,
             ephemeral_gb=instance.flavor.ephemeral_gb,
@@ -383,18 +416,21 @@ class ComputeDriver(object):
             swap=instance.flavor.swap,
             extra_specs=instance.flavor.extra_specs,
         )
-        image = ImageMeta(
-            id=instance.image_ref,
-            name=system_meta.get('image_name'),
-            properties=instance.image_meta.properties
-        )
+        image = ImageMeta.from_instance(instance)
         meta = InstanceDriverMetadata(
             instance_meta=instance_meta,
             owner=owner,
             flavor=flavor,
             image=image,
             root_type = 'image' if instance.image_ref else 'volume',
-            root_id = instance.image_ref,
+            # NOTE(callumdickinson): Once an image-backed instance has
+            # been shelved, instance.image_ref changes to the ID of the
+            # temporary image storing the root volume while shelved.
+            # Prefer base_image_ref from the system metadata, if available,
+            # to ensure that the ID of the original image the instance was
+            # booted from is used for the driver metadata.
+            root_id=system_meta.get('image_base_image_ref',
+                                    instance.image_ref),
             creation_time = time.time(),
             network_info=network_info
         )

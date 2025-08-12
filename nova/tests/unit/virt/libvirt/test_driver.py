@@ -665,7 +665,8 @@ class FakeNodeDevice(object):
         return self.xml
 
 
-def _create_test_instance():
+def _create_test_instance(image_ref='155d900f-4e14-4e4c-a73d-069cbf4541e6',
+                          system_metadata=None):
     flavor = objects.Flavor(memory_mb=2048,
                             swap=0,
                             vcpu_weight=None,
@@ -677,6 +678,9 @@ def _create_test_instance():
                             flavorid=u'1',
                             vcpus=2,
                             extra_specs={})
+    if system_metadata is None:
+        system_metadata = {'image_base_image_ref': image_ref,
+                           'image_disk_format': 'raw'}
     return {
         'id': 1,
         'uuid': uuids.instance,
@@ -687,12 +691,10 @@ def _create_test_instance():
         'vcpus': 2,
         'project_id': 'fake',
         'bridge': 'br101',
-        'image_ref': '155d900f-4e14-4e4c-a73d-069cbf4541e6',
+        'image_ref': image_ref,
         'root_gb': 10,
         'ephemeral_gb': 20,
-        'system_metadata': {
-            'image_disk_format': 'raw'
-        },
+        'system_metadata': system_metadata,
         'instance_type_id': flavor.id,
         'flavor': flavor,
         'new_flavor': None,
@@ -2902,6 +2904,146 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         self.assertEqual(meta.ports.ports[1].ips[1].ip_type, 'fixed')
         self.assertEqual(meta.ports.ports[1].ips[1].ip_version, 6)
 
+    def test_get_guest_config_meta_building_image_id(self):
+        test_instance = copy.deepcopy(self.test_instance)
+        test_instance["vm_state"] = "building"
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+        idm = drvr.get_instance_driver_metadata(
+            objects.Instance(**test_instance),
+            _fake_network_info(self))
+        meta = drvr._get_guest_config_meta(idm)
+
+        self.assertEqual("image", meta.roottype)
+        self.assertEqual("155d900f-4e14-4e4c-a73d-069cbf4541e6",
+                         meta.rootid)
+
+    def test_get_guest_config_meta_no_base_image_ref_image_id(self):
+        test_instance = copy.deepcopy(self.test_instance)
+        test_instance["system_metadata"] = {"image_disk_format": "raw"}
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+        idm = drvr.get_instance_driver_metadata(
+            objects.Instance(**test_instance),
+            _fake_network_info(self))
+        meta = drvr._get_guest_config_meta(idm)
+
+        self.assertEqual("image", meta.roottype)
+        self.assertEqual("155d900f-4e14-4e4c-a73d-069cbf4541e6",
+                         meta.rootid)
+
+    def test_get_guest_config_meta_unshelve_image_id(self):
+        test_instance = copy.deepcopy(self.test_instance)
+        test_instance["vm_state"] = "shelved_offloaded"
+        test_instance["system_metadata"]["image_base_image_ref"] = (
+            "85daefce-4e20-4d2b-a4f3-11d3765f2a8f")
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+        idm = drvr.get_instance_driver_metadata(
+            objects.Instance(**test_instance),
+            _fake_network_info(self))
+        meta = drvr._get_guest_config_meta(idm)
+
+        self.assertEqual("image", meta.roottype)
+        self.assertEqual(test_instance["system_metadata"][
+                            "image_base_image_ref"],
+                         meta.rootid)
+
+    def test_get_guest_config_meta_from_image(self):
+        image_id = '85daefce-4e20-4d2b-a4f3-11d3765f2a8f'
+        instance = _create_test_instance(
+            image_ref=image_id,
+            system_metadata={
+                'image_base_image_ref': image_id,
+                'image_container_format': 'bare',
+                'image_disk_format': 'raw',
+                'image_min_disk': 10,
+                'image_min_ram': 0,
+                'image_os_type': 'linux'})
+        instance['info_cache'] = self.test_instance['info_cache']
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+        idm = drvr.get_instance_driver_metadata(
+            objects.Instance(**instance),
+            _fake_network_info(self, num_networks=0))
+        meta = drvr._get_guest_config_meta(idm)
+
+        self.assertEqual(meta.image.uuid, image_id)
+        image_meta = meta.image.image_meta
+        self.assertEqual(image_meta.container_format, 'bare')
+        self.assertEqual(image_meta.disk_format, 'raw')
+        self.assertEqual(image_meta.min_disk, 10)
+        self.assertEqual(image_meta.min_ram, 0)
+        self.assertEqual(dict(image_meta.properties), {'os_type': 'linux'})
+
+    def test_get_guest_config_meta_from_image_unshelved(self):
+        instance = _create_test_instance(
+            image_ref='e3e66d4e-43ba-4e3b-8a1d-46cb78a0b527',
+            system_metadata={
+                'image_base_image_ref': (
+                    '155d900f-4e14-4e4c-a73d-069cbf4541e6'),
+                'container_format': 'bare',
+                'disk_format': 'raw',
+                'min_disk': 1,
+                'min_ram': 0,
+                'image_os_type': 'linux'})
+        instance['vm_state'] = 'shelved_offloaded'
+        instance['info_cache'] = self.test_instance['info_cache']
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+        idm = drvr.get_instance_driver_metadata(
+            objects.Instance(**instance),
+            _fake_network_info(self, num_networks=0))
+        meta = drvr._get_guest_config_meta(idm)
+
+        self.assertEqual(meta.image.uuid,
+                         '155d900f-4e14-4e4c-a73d-069cbf4541e6')
+        image_meta = meta.image.image_meta
+        self.assertEqual(image_meta.container_format, 'bare')
+        self.assertEqual(image_meta.disk_format, 'raw')
+        self.assertEqual(image_meta.min_disk, 1)
+        self.assertEqual(image_meta.min_ram, 0)
+        self.assertEqual(dict(image_meta.properties), {'os_type': 'linux'})
+
+    def test_get_guest_config_meta_from_volume_image(self):
+        instance = _create_test_instance(
+            image_ref='',
+            system_metadata={
+                'image_base_image_ref': '',
+                'image_container_format': 'bare',
+                'image_disk_format': 'raw',
+                'image_min_disk': 10,
+                'image_min_ram': 0,
+                'image_os_type': 'linux'})
+        instance['info_cache'] = self.test_instance['info_cache']
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+        idm = drvr.get_instance_driver_metadata(
+            objects.Instance(**instance),
+            _fake_network_info(self, num_networks=0))
+        meta = drvr._get_guest_config_meta(idm)
+
+        self.assertEqual(meta.image.uuid, '')
+        image_meta = meta.image.image_meta
+        self.assertEqual(image_meta.container_format, 'bare')
+        self.assertEqual(image_meta.disk_format, 'raw')
+        self.assertEqual(image_meta.min_disk, 10)
+        self.assertEqual(image_meta.min_ram, 0)
+        self.assertEqual(dict(image_meta.properties), {'os_type': 'linux'})
+
+    def test_get_guest_config_meta_from_volume_no_image(self):
+        instance = _create_test_instance(
+            image_ref='',
+            system_metadata={'image_base_image_ref': ''})
+        instance['info_cache'] = self.test_instance['info_cache']
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+        idm = drvr.get_instance_driver_metadata(
+            objects.Instance(**instance),
+            _fake_network_info(self, num_networks=0))
+        meta = drvr._get_guest_config_meta(idm)
+
+        self.assertEqual(meta.image.uuid, '')
+        image_meta = meta.image.image_meta
+        self.assertIsNone(image_meta.container_format)
+        self.assertIsNone(image_meta.disk_format)
+        self.assertIsNone(image_meta.min_disk)
+        self.assertIsNone(image_meta.min_ram)
+        self.assertEqual(dict(image_meta.properties), {})
+
     @mock.patch.object(time, "time")
     def test_get_guest_config(self, time_mock):
         """Generate a "standard" guest with minimal configuration.
@@ -2926,6 +3068,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         flavor = objects.Flavor(
             id=1,
             name='m1.small',
+            flavorid='6a523f6f-5ede-4a3a-938b-1c3a5d665771',
             memory_mb=6,
             vcpus=28,
             root_gb=496,
@@ -3002,11 +3145,14 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         self.assertIsInstance(
             cfg.metadata[0].flavor, vconfig.LibvirtConfigGuestMetaNovaFlavor)
         self.assertEqual("m1.small", cfg.metadata[0].flavor.name)
+        self.assertEqual("6a523f6f-5ede-4a3a-938b-1c3a5d665771",
+                         cfg.metadata[0].flavor.id)
         self.assertEqual(6, cfg.metadata[0].flavor.memory)
         self.assertEqual(28, cfg.metadata[0].flavor.vcpus)
         self.assertEqual(496, cfg.metadata[0].flavor.disk)
         self.assertEqual(8128, cfg.metadata[0].flavor.ephemeral)
         self.assertEqual(33550336, cfg.metadata[0].flavor.swap)
+        self.assertEqual({}, cfg.metadata[0].flavor.extra_specs)
 
         num_ports = 0
         for device in cfg.devices:
@@ -3051,7 +3197,8 @@ class LibvirtConnTestCase(test.NoDBTestCase,
             ephemeral_gb=8128,
             swap=33550336,
             extra_specs={},
-            id=42
+            id=42,
+            flavorid='someflavor',
         )
         instance_ref = objects.Instance(**test_instance)
         instance_ref.flavor = flavor
@@ -3207,7 +3354,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         flavor = objects.Flavor(
             id=42, name='m1.small', memory_mb=6,
             vcpus=28, root_gb=496, ephemeral_gb=8128,
-            swap=33550336, extra_specs={})
+            swap=33550336, extra_specs={}, flavorid='someflavor')
         instance_ref = objects.Instance(**test_instance)
         instance_ref.flavor = flavor
         image_meta = objects.ImageMeta.from_dict(self.test_image_meta)
@@ -3380,7 +3527,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         image_meta = objects.ImageMeta.from_dict(self.test_image_meta)
         flavor = objects.Flavor(memory_mb=1, vcpus=2, root_gb=496,
                                 ephemeral_gb=8128, swap=33550336, name='fake',
-                                extra_specs={}, id=42)
+                                extra_specs={}, id=42, flavorid='someflavor')
         instance_ref.flavor = flavor
 
         caps = vconfig.LibvirtConfigCaps()
@@ -3417,7 +3564,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         flavor = objects.Flavor(
             id=42, memory_mb=4096, vcpus=4, root_gb=496,
             ephemeral_gb=8128, swap=33550336, name='fake',
-            extra_specs={})
+            extra_specs={}, flavorid='someflavor')
         instance_ref.flavor = flavor
 
         caps = vconfig.LibvirtConfigCaps()
@@ -3444,6 +3591,42 @@ class LibvirtConnTestCase(test.NoDBTestCase,
             self.assertIsNone(cfg.cpuset)
             self.assertIsNone(cfg.cputune)
             self.assertIsNone(cfg.cpu.numa)
+
+    def test_get_guest_config_flavor_extra_specs(self):
+        flavor = objects.Flavor(name='m1.small',
+                                flavorid=(
+                                    '6a523f6f-5ede-4a3a-938b-1c3a5d665771'),
+                                memory_mb=6,
+                                vcpus=28,
+                                root_gb=496,
+                                ephemeral_gb=8128,
+                                swap=33550336,
+                                extra_specs={"hw_rng:allowed": "true"})
+        instance_ref = objects.Instance(**self.test_instance)
+        instance_ref.flavor = flavor
+        image_meta = objects.ImageMeta.from_dict(self.test_image_meta)
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+        cfg = drvr._get_guest_config(instance_ref,
+                                     _fake_network_info(self, 1),
+                                     image_meta, {'mapping': {}})
+        self.assertIsInstance(cfg.metadata[0].flavor,
+                              vconfig.LibvirtConfigGuestMetaNovaFlavor)
+        self.assertEqual("m1.small",
+                         cfg.metadata[0].flavor.name)
+        self.assertEqual("6a523f6f-5ede-4a3a-938b-1c3a5d665771",
+                         cfg.metadata[0].flavor.id)
+        self.assertEqual(6,
+                         cfg.metadata[0].flavor.memory)
+        self.assertEqual(28,
+                         cfg.metadata[0].flavor.vcpus)
+        self.assertEqual(496,
+                         cfg.metadata[0].flavor.disk)
+        self.assertEqual(8128,
+                         cfg.metadata[0].flavor.ephemeral)
+        self.assertEqual(33550336,
+                         cfg.metadata[0].flavor.swap)
+        self.assertEqual({"hw_rng:allowed": "true"},
+                         cfg.metadata[0].flavor.extra_specs)
 
     def _test_get_guest_memory_backing_config(
             self, host_topology, inst_topology, numatune):
@@ -3753,7 +3936,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         flavor = objects.Flavor(
             id=42, name='m1.small', memory_mb=6,
             vcpus=28, root_gb=496, ephemeral_gb=8128,
-            swap=33550336, extra_specs=extra_specs)
+            swap=33550336, extra_specs=extra_specs, flavorid='someflavor')
 
         instance_ref = objects.Instance(**self.test_instance)
         instance_ref.flavor = flavor
@@ -3855,7 +4038,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         image_meta = objects.ImageMeta.from_dict(self.test_image_meta)
         flavor = objects.Flavor(memory_mb=1, vcpus=2, root_gb=496,
                                 ephemeral_gb=8128, swap=33550336, name='fake',
-                                extra_specs={}, id=42)
+                                extra_specs={}, id=42, flavorid='someflavor')
         instance_ref.flavor = flavor
 
         caps = vconfig.LibvirtConfigCaps()
@@ -3908,7 +4091,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         image_meta = objects.ImageMeta.from_dict(self.test_image_meta)
         flavor = objects.Flavor(memory_mb=4096, vcpus=4, root_gb=496,
                                 ephemeral_gb=8128, swap=33550336, name='fake',
-                                extra_specs={}, id=42)
+                                extra_specs={}, id=42, flavorid='someflavor')
         instance_ref.flavor = flavor
 
         caps = vconfig.LibvirtConfigCaps()
@@ -4026,7 +4209,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         image_meta = objects.ImageMeta.from_dict(self.test_image_meta)
         flavor = objects.Flavor(memory_mb=1024, vcpus=2, root_gb=496,
                                 ephemeral_gb=8128, swap=33550336, name='fake',
-                                extra_specs={}, id=42)
+                                extra_specs={}, id=42, flavorid='someflavor')
         instance_ref.flavor = flavor
 
         caps = vconfig.LibvirtConfigCaps()
@@ -4069,7 +4252,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         image_meta = objects.ImageMeta.from_dict(self.test_image_meta)
         flavor = objects.Flavor(memory_mb=2048, vcpus=2, root_gb=496,
                                 ephemeral_gb=8128, swap=33550336, name='fake',
-                                extra_specs={}, id=42)
+                                extra_specs={}, id=42, flavorid='someflavor')
         instance_ref.flavor = flavor
 
         caps = vconfig.LibvirtConfigCaps()
@@ -4122,7 +4305,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         image_meta = objects.ImageMeta.from_dict(self.test_image_meta)
         flavor = objects.Flavor(memory_mb=2048, vcpus=4, root_gb=496,
                                 ephemeral_gb=8128, swap=33550336, name='fake',
-                                extra_specs={}, id=42)
+                                extra_specs={}, id=42, flavorid='someflavor')
         instance_ref.flavor = flavor
 
         caps = vconfig.LibvirtConfigCaps()
@@ -4199,7 +4382,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         image_meta = objects.ImageMeta.from_dict(self.test_image_meta)
         flavor = objects.Flavor(memory_mb=2048, vcpus=4, root_gb=496,
                                 ephemeral_gb=8128, swap=33550336, name='fake',
-                                extra_specs={}, id=42)
+                                extra_specs={}, id=42, flavorid='someflavor')
         instance_ref.flavor = flavor
 
         caps = vconfig.LibvirtConfigCaps()
@@ -4277,7 +4460,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         image_meta = objects.ImageMeta.from_dict(self.test_image_meta)
         flavor = objects.Flavor(memory_mb=2048, vcpus=2, root_gb=496,
                                 ephemeral_gb=8128, swap=33550336, name='fake',
-                                extra_specs={}, id=42)
+                                extra_specs={}, id=42, flavorid='someflavor')
         instance_ref.flavor = flavor
 
         caps = vconfig.LibvirtConfigCaps()
@@ -4366,7 +4549,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         image_meta = objects.ImageMeta.from_dict(self.test_image_meta)
         flavor = objects.Flavor(memory_mb=2048, vcpus=8, root_gb=496,
                                 ephemeral_gb=8128, swap=33550336, name='fake',
-                                extra_specs={}, id=42)
+                                extra_specs={}, id=42, flavorid='someflavor')
         instance_ref.flavor = flavor
 
         caps = vconfig.LibvirtConfigCaps()
@@ -4480,7 +4663,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         image_meta = objects.ImageMeta.from_dict(self.test_image_meta)
         flavor = objects.Flavor(memory_mb=2048, vcpus=8, root_gb=496,
                                 ephemeral_gb=8128, swap=33550336, name='fake',
-                                extra_specs={}, id=42)
+                                extra_specs={}, id=42, flavorid='someflavor')
         instance_ref.flavor = flavor
 
         caps = vconfig.LibvirtConfigCaps()
@@ -4583,7 +4766,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
                 "hw:cpu_realtime": "yes",
                 "hw:cpu_policy": "mixed",
                 "hw:cpu_realtime_mask": "^2-3"
-            }, id=42)
+            }, id=42, flavorid='someflavor')
         instance_ref.flavor = flavor
 
         caps = vconfig.LibvirtConfigCaps()
@@ -4692,7 +4875,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         image_meta = objects.ImageMeta.from_dict(self.test_image_meta)
         flavor = objects.Flavor(memory_mb=2048, vcpus=4, root_gb=496,
                                 ephemeral_gb=8128, swap=33550336, name='fake',
-                                extra_specs={}, id=42)
+                                extra_specs={}, id=42, flavorid='someflavor')
         instance_ref.flavor = flavor
 
         caps = vconfig.LibvirtConfigCaps()
@@ -4776,7 +4959,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
                                     "hw:cpu_realtime": "yes",
                                     "hw:cpu_policy": "dedicated",
                                     "hw:cpu_realtime_mask": "^0-1"
-                                }, id=42)
+                                }, id=42, flavorid='someflavor')
         instance_ref.flavor = flavor
 
         caps = vconfig.LibvirtConfigCaps()
