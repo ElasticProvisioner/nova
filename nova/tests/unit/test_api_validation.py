@@ -764,31 +764,6 @@ class NameOrNoneTestCase(APIValidationTestCase):
                                     expected_detail=detail)
 
 
-class TcpUdpPortTestCase(APIValidationTestCase):
-
-    post_schema = {
-        'type': 'object',
-        'properties': {
-            'foo': parameter_types.tcp_udp_port,
-        },
-    }
-
-    def test_validate_tcp_udp_port(self):
-        self.post(body={'foo': 1024}, req=FakeRequest())
-        self.post(body={'foo': '1024'}, req=FakeRequest())
-
-    def test_validate_tcp_udp_port_fails(self):
-        detail = ("Invalid input for field/attribute foo. Value: True."
-                  " True is not of type 'integer', 'string'")
-        self.check_validation_error(self.post, body={'foo': True},
-                                    expected_detail=detail)
-
-        detail = ("Invalid input for field/attribute foo. Value: 65536."
-                  " 65536 is greater than the maximum of 65535")
-        self.check_validation_error(self.post, body={'foo': 65536},
-                                    expected_detail=detail)
-
-
 class CidrFormatTestCase(APIValidationTestCase):
 
     post_schema = {
@@ -924,10 +899,10 @@ class UriTestCase(APIValidationTestCase):
 
     def test_validate_uri(self):
         self.post(
-            body={'foo': 'http://localhost:8774/v2/servers'},
+            body={'foo': 'http://localhost:8774/v2.1/servers'},
             req=FakeRequest())
         self.post(
-            body={'foo': 'http://[::1]:8774/v2/servers'},
+            body={'foo': 'http://[::1]:8774/v2.1/servers'},
             req=FakeRequest())
 
     def test_validate_uri_null(self):
@@ -936,13 +911,13 @@ class UriTestCase(APIValidationTestCase):
     def test_validate_uri_fails(self):
         base_detail = ("Invalid input for field/attribute foo. Value: {0}. "
                        "'{0}' is not a 'uri'")
-        invalid_uri = 'http://localhost:8774/v2/servers##'
+        invalid_uri = 'http://localhost:8774/v2.1/servers##'
         self.check_validation_error(self.post,
                                     body={'foo': invalid_uri},
                                     expected_detail=base_detail.format(
                                         invalid_uri))
 
-        invalid_uri = 'http://[fdf8:01]:8774/v2/servers'
+        invalid_uri = 'http://[fdf8:01]:8774/v2.1/servers'
         self.check_validation_error(self.post,
                                     body={'foo': invalid_uri},
                                     expected_detail=base_detail.format(
