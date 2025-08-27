@@ -15,23 +15,19 @@
 
 from unittest import mock
 
+from oslo_utils.fixture import uuidsentinel as uuids
 import webob
 
-from nova.api.openstack.compute import volumes as volumes_v21
+from nova.api.openstack.compute import snapshots
 from nova import exception
 from nova import test
 from nova.tests.unit.api.openstack import fakes
 from nova.volume import cinder
 
-FAKE_UUID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
-
 
 class SnapshotApiTestV21(test.NoDBTestCase):
-    controller = volumes_v21.SnapshotController()
-    validation_error = exception.ValidationError
-
     def setUp(self):
-        super(SnapshotApiTestV21, self).setUp()
+        super().setUp()
         fakes.stub_out_networking(self)
         self.stub_out("nova.volume.cinder.API.create_snapshot",
                       fakes.stub_snapshot_create)
@@ -44,10 +40,11 @@ class SnapshotApiTestV21(test.NoDBTestCase):
         self.stub_out("nova.volume.cinder.API.get_all_snapshots",
                       fakes.stub_snapshot_get_all)
         self.stub_out("nova.volume.cinder.API.get", fakes.stub_volume_get)
+        self.controller = snapshots.SnapshotController()
         self.req = fakes.HTTPRequest.blank('')
 
     def _test_snapshot_create(self, force):
-        snapshot = {"volume_id": '12',
+        snapshot = {"volume_id": uuids.volume,
                     "force": force,
                     "display_name": "Snapshot Test Name",
                     "display_description": "Snapshot Test Desc"}
@@ -70,41 +67,51 @@ class SnapshotApiTestV21(test.NoDBTestCase):
     def test_snapshot_create_invalid_force_param(self):
         body = {'snapshot': {'volume_id': '1',
                              'force': '**&&^^%%$$##@@'}}
-        self.assertRaises(self.validation_error,
-                          self.controller.create, self.req, body=body)
+        self.assertRaises(
+            exception.ValidationError,
+            self.controller.create, self.req, body=body)
+
+    def test_create_no_body(self):
+        self.assertRaises(
+            exception.ValidationError,
+            self.controller.create, self.req, body=None)
+
+    def test_create_missing_volume(self):
+        body = {'foo': {'a': 'b'}}
+        self.assertRaises(
+            exception.ValidationError,
+            self.controller.create, self.req, body=body)
+
+    def test_create_malformed_entity(self):
+        body = {'snapshot': 'string'}
+        self.assertRaises(
+            exception.ValidationError,
+            self.controller.create, self.req, body=body)
 
     def test_snapshot_delete(self):
-        snapshot_id = '123'
-        delete = self.controller.delete
-        result = delete(self.req, snapshot_id)
+        self.controller.delete(self.req, uuids.snapshot)
 
-        # NOTE: on v2.1, http status code is set as wsgi_codes of API
-        # method instead of status_int in a response object.
-        if isinstance(self.controller, volumes_v21.SnapshotController):
-            status_int = delete.wsgi_codes(self.req)
-        else:
-            status_int = result.status_int
+        status_int = self.controller.delete.wsgi_codes(self.req)
         self.assertEqual(202, status_int)
 
     @mock.patch.object(cinder.API, 'delete_snapshot',
-        side_effect=exception.SnapshotNotFound(snapshot_id=FAKE_UUID))
-    def test_delete_snapshot_not_exists(self, mock_mr):
-        self.assertRaises(webob.exc.HTTPNotFound, self.controller.delete,
-                self.req, FAKE_UUID)
-
-    def test_snapshot_delete_invalid_id(self):
-        self.assertRaises(webob.exc.HTTPNotFound, self.controller.delete,
-                self.req, '-1')
+        side_effect=exception.SnapshotNotFound(snapshot_id=uuids.missing))
+    def test_snapshot_delete_not_exists(self, mock_mr):
+        self.assertRaises(
+            webob.exc.HTTPNotFound, self.controller.delete,
+            self.req, uuids.missing)
 
     def test_snapshot_show(self):
-        snapshot_id = '123'
-        resp_dict = self.controller.show(self.req, snapshot_id)
+        resp_dict = self.controller.show(self.req, uuids.snapshot)
         self.assertIn('snapshot', resp_dict)
-        self.assertEqual(str(snapshot_id), resp_dict['snapshot']['id'])
+        self.assertEqual(uuids.snapshot, resp_dict['snapshot']['id'])
 
-    def test_snapshot_show_invalid_id(self):
-        self.assertRaises(webob.exc.HTTPNotFound, self.controller.show,
-                self.req, '-1')
+    @mock.patch.object(cinder.API, 'get_snapshot',
+        side_effect=exception.SnapshotNotFound(snapshot_id=uuids.missing))
+    def test_snapshot_show_not_exists(self, mock_mr):
+        self.assertRaises(
+            webob.exc.HTTPNotFound, self.controller.show,
+            self.req, uuids.missing)
 
     def test_snapshot_detail(self):
         resp_dict = self.controller.detail(self.req)
@@ -113,7 +120,7 @@ class SnapshotApiTestV21(test.NoDBTestCase):
         self.assertEqual(3, len(resp_snapshots))
 
         resp_snapshot = resp_snapshots.pop()
-        self.assertEqual(102, resp_snapshot['id'])
+        self.assertEqual(uuids.snapshot_c, resp_snapshot['id'])
 
     def test_snapshot_detail_offset_and_limit(self):
         path = '/v2.1/os-snapshots/detail?offset=1&limit=1'
@@ -124,7 +131,7 @@ class SnapshotApiTestV21(test.NoDBTestCase):
         self.assertEqual(1, len(resp_snapshots))
 
         resp_snapshot = resp_snapshots.pop()
-        self.assertEqual(101, resp_snapshot['id'])
+        self.assertEqual(uuids.snapshot_b, resp_snapshot['id'])
 
     def test_snapshot_index(self):
         resp_dict = self.controller.index(self.req)
@@ -224,15 +231,15 @@ class SnapshotApiTestV21(test.NoDBTestCase):
 class TestSnapshotAPIDeprecation(test.NoDBTestCase):
 
     def setUp(self):
-        super(TestSnapshotAPIDeprecation, self).setUp()
-        self.controller = volumes_v21.SnapshotController()
+        super().setUp()
+        self.controller = snapshots.SnapshotController()
         self.req = fakes.HTTPRequest.blank('', version='2.36')
 
     def test_all_apis_return_not_found(self):
         self.assertRaises(exception.VersionNotFoundForAPIMethod,
-            self.controller.show, self.req, fakes.FAKE_UUID)
+            self.controller.show, self.req, uuids.snapshot_id)
         self.assertRaises(exception.VersionNotFoundForAPIMethod,
-            self.controller.delete, self.req, fakes.FAKE_UUID)
+            self.controller.delete, self.req, uuids.snapshot_id)
         self.assertRaises(exception.VersionNotFoundForAPIMethod,
             self.controller.index, self.req)
         self.assertRaises(exception.VersionNotFoundForAPIMethod,

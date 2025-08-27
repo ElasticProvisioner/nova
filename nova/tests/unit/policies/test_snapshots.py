@@ -14,15 +14,26 @@ from unittest import mock
 
 from oslo_utils.fixture import uuidsentinel as uuids
 
-from nova.api.openstack.compute import volumes
+from nova.api.openstack.compute import snapshots
 from nova.policies import base as base_policy
 from nova.policies import volumes as v_policies
 from nova.tests.unit.api.openstack import fakes
 from nova.tests.unit.policies import base
 
 
-class VolumesPolicyTest(base.BasePolicyTest):
-    """Test Volumes APIs policies with all possible context.
+fake_snapshot = {
+    'created_at': '2024-11-26T18:20:21.000000',
+    'display_name': 'foo',
+    'display_description': None,
+    'id': uuids.snapshot_id,
+    'status': 'available',
+    'volume_id': uuids.volume_id,
+    'volume_size': 1,
+}
+
+
+class SnapshotsPolicyTest(base.BasePolicyTest):
+    """Test Snapshots APIs policies with all possible context.
 
     This class defines the set of context with different roles
     which are allowed and not allowed to pass the policy checks.
@@ -32,9 +43,8 @@ class VolumesPolicyTest(base.BasePolicyTest):
 
     def setUp(self):
         super().setUp()
-        self.controller = volumes.VolumeController()
+        self.snapshot_ctlr = snapshots.SnapshotController()
         self.req = fakes.HTTPRequest.blank('')
-        self.controller._translate_volume_summary_view = mock.MagicMock()
         # Everyone will be able to perform crud operations
         # on volume and volume snapshots.
         # NOTE: Nova cannot verify the volume/snapshot owner during nova policy
@@ -65,72 +75,49 @@ class VolumesPolicyTest(base.BasePolicyTest):
             self.other_project_member_context
         ]
 
-    @mock.patch('nova.volume.cinder.API.get_all')
-    def test_list_volumes_policy(self, mock_get):
-        rule_name = "os_compute_api:os-volumes:list"
+    @mock.patch('nova.volume.cinder.API.get_all_snapshots')
+    def test_list_snapshots_policy(self, mock_get):
+        mock_get.return_value = []
+        rule_name = "os_compute_api:os-volumes:snapshots:list"
         self.common_policy_auth(self.project_reader_authorized_contexts,
-                                rule_name, self.controller.index,
+                                rule_name, self.snapshot_ctlr.index,
                                 self.req)
 
-    @mock.patch('nova.volume.cinder.API.get_all')
-    def test_list_detail_volumes_policy(self, mock_get):
-        rule_name = "os_compute_api:os-volumes:detail"
+    @mock.patch('nova.volume.cinder.API.get_all_snapshots')
+    def test_list_detail_snapshots_policy(self, mock_get):
+        mock_get.return_value = []
+        rule_name = "os_compute_api:os-volumes:snapshots:detail"
         self.common_policy_auth(self.project_reader_authorized_contexts,
-                                rule_name, self.controller.detail,
+                                rule_name, self.snapshot_ctlr.detail,
                                 self.req)
 
-    @mock.patch('nova.volume.cinder.API.get')
-    def test_show_volume_policy(self, mock_get):
-        mock_get.return_value = {
-            'attach_status': 'detached',
-            'availability_zone': 'nova',
-            'created_at': '2024-11-26T18:20:21.000000',
-            'display_name': 'foo',
-            'display_description': None,
-            'id': uuids.volume_id,
-            'size': 1,
-            'snapshot_id': None,
-            'status': 'available',
-            'volume_type_id': uuids.volume_type_id,
-        }
-        rule_name = "os_compute_api:os-volumes:show"
+    @mock.patch('nova.volume.cinder.API.get_snapshot')
+    def test_show_snapshot_policy(self, mock_get):
+        mock_get.return_value = fake_snapshot
+        rule_name = "os_compute_api:os-volumes:snapshots:show"
         self.common_policy_auth(self.project_reader_authorized_contexts,
-                                rule_name, self.controller.show,
+                                rule_name, self.snapshot_ctlr.show,
                                 self.req, uuids.fake_id)
 
-    @mock.patch('nova.volume.cinder.API.create')
-    def test_create_volumes_policy(self, mock_create):
-        mock_create.return_value = {
-            'attach_status': 'detached',
-            'availability_zone': 'nova',
-            'created_at': '2024-11-26T18:20:21.000000',
-            'display_name': 'foo',
-            'display_description': None,
-            'id': uuids.volume_id,
-            'size': 1,
-            'snapshot_id': None,
-            'status': 'available',
-            'volume_type_id': uuids.volume_type_id,
-        }
-        rule_name = "os_compute_api:os-volumes:create"
-        body = {"volume": {"size": 100,
-               "display_name": "Volume Test Name",
-               "display_description": "Volume Test Desc",
-               "availability_zone": "dublin"}}
+    @mock.patch('nova.volume.cinder.API.create_snapshot')
+    def test_create_snapshot_policy(self, mock_create):
+        mock_create.return_value = fake_snapshot
+        rule_name = "os_compute_api:os-volumes:snapshots:create"
+        body = {"snapshot": {"volume_id": uuids.fake_id}}
         self.common_policy_auth(self.project_member_authorized_contexts,
-                                rule_name, self.controller.create,
+                                rule_name, self.snapshot_ctlr.create,
                                 self.req, body=body)
 
-    @mock.patch('nova.volume.cinder.API.delete')
-    def test_delete_volume_policy(self, mock_delete):
-        rule_name = "os_compute_api:os-volumes:delete"
+    @mock.patch('nova.volume.cinder.API.delete_snapshot')
+    def test_delete_snapshot_policy(self, mock_delete):
+        rule_name = "os_compute_api:os-volumes:snapshots:delete"
         self.common_policy_auth(self.project_member_authorized_contexts,
-                                rule_name, self.controller.delete,
+                                rule_name, self.snapshot_ctlr.delete,
                                 self.req, uuids.fake_id)
 
 
-class VolumesNoLegacyNoScopePolicyTest(VolumesPolicyTest):
-    """Test Volume APIs policies with no legacy deprecated rules
+class SnapshotsNoLegacyNoScopePolicyTest(SnapshotsPolicyTest):
+    """Test Snapshot APIs policies with no legacy deprecated rules
     and no scope checks which means new defaults only.
 
     """
@@ -181,8 +168,8 @@ class VolumesNoLegacyNoScopePolicyTest(VolumesPolicyTest):
         ]
 
 
-class VolumesScopeTypePolicyTest(VolumesPolicyTest):
-    """Test Volumes APIs policies with system scope enabled.
+class SnapshotsScopeTypePolicyTest(SnapshotsPolicyTest):
+    """Test Snapshots APIs policies with system scope enabled.
 
     This class set the nova.conf [oslo_policy] enforce_scope to True
     so that we can switch on the scope checking on oslo policy side.
@@ -217,8 +204,8 @@ class VolumesScopeTypePolicyTest(VolumesPolicyTest):
         ]
 
 
-class VolumesScopeTypeNoLegacyPolicyTest(VolumesScopeTypePolicyTest):
-    """Test Volume APIs policies with system scope enabled,
+class SnapshotsScopeTypeNoLegacyPolicyTest(SnapshotsScopeTypePolicyTest):
+    """Test Snapshot APIs policies with system scope enabled,
     and no legacy deprecated rules.
     """
     without_deprecated_rules = True
