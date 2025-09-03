@@ -52,6 +52,26 @@
     timeout: 3600
 
 - job:
+    name: nova-tox-py312-threading
+    parent: openstack-tox-py312
+    description: |
+      Run tox-based unit tests for the OpenStack Nova project
+      under cPython version 3.12 with eventlet disabled.
+      Uses tox with the ``py312-threading`` environment.
+
+    required-projects:
+      # including nova here makes this job reusable by other projects and
+      # allow depends-on placement to work with our placement fixture
+      - openstack/nova
+      - openstack/placement
+    vars:
+      # explicitly stating the work dir makes this job reusable by other
+      # projects
+      zuul_work_dir: src/opendev.org/openstack/nova
+      bindep_profile: test py312
+      tox_envlist: py312-threading
+
+- job:
     name: nova-tox-validate-backport
     parent: openstack-tox
     description: |
@@ -735,10 +755,6 @@
 - job:
     name: tempest-integrated-compute-rbac-old-defaults
     parent: tempest-integrated-compute
-    # TODO(gmann): As per the 2025.1 testing runtime, we need to run at least
-    # one job on jammy. This job can be moved to Noble in the next cycle
-    # (2025.2).
-    nodeset: openstack-single-node-jammy
     description: |
       This job runs the Tempest tests with Nova RBAC old defaults
     irrelevant-files: &policies-irrelevant-files
@@ -821,6 +837,7 @@
         - barbican-tempest-plugin-simple-crypto:
             irrelevant-files: *nova-base-irrelevant-files
             voting: false
+        - nova-tox-py312-threading
     gate:
       jobs:
         - nova-live-migration
@@ -848,6 +865,7 @@
             irrelevant-files: *nova-base-irrelevant-files
         - openstacksdk-functional-devstack:
             irrelevant-files: *nova-base-irrelevant-files
+        - nova-tox-py312-threading
     periodic-weekly:
       jobs:
         # Runs emulation feature functionality test less frequently due
