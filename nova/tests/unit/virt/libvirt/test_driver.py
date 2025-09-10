@@ -3787,6 +3787,53 @@ class LibvirtConnTestCase(test.NoDBTestCase,
             None, None, flavor, image_meta,
         )
 
+    @mock.patch.object(
+        fakelibvirt.virConnect, '_domain_capability_features', new=
+        fakelibvirt.virConnect._domain_capability_features_with_SEV
+    )
+    @mock.patch.object(host.Host, "_check_machine_type", new=mock.Mock())
+    def test_get_guest_config_memory_encryption(self):
+        """Generate a guest with memory encryption.
+
+        This configures an memory encryption.
+        """
+        self.flags(virt_type="kvm", group='libvirt')
+
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+        drvr._host._supports_amd_sev = True
+        drvr._host._supports_amd_sev_es = False
+        instance_ref = objects.Instance(**self.test_instance)
+        image_meta = objects.ImageMeta.from_dict({
+            "hw_architecture": fields.Architecture.X86_64,
+            "disk_format": "raw",
+            "properties": {
+                "hw_machine_type": "q35",
+                "hw_firmware_type": "uefi",
+                "hw_mem_encryption": True,
+            }
+        })
+
+        disk_info = blockinfo.get_disk_info(
+            CONF.libvirt.virt_type,
+            instance_ref,
+            image_meta,
+        )
+
+        cfg = drvr._get_guest_config(
+            instance_ref,
+            _fake_network_info(self),
+            image_meta,
+            disk_info,
+        )
+
+        # NOTE(tkajinm): vmcoreinfo should be disabled in this case
+        self.assertEqual(2, len(cfg.features))
+        for idx, device_type in enumerate([
+            vconfig.LibvirtConfigGuestFeatureACPI,
+            vconfig.LibvirtConfigGuestFeatureAPIC,
+        ]):
+            self.assertIsInstance(cfg.features[idx], device_type)
+
     def _test_get_mem_encryption_config(
             self, expected=None, host_sev_enabled=False, enc_extra_spec=None,
             enc_image_prop=None, hw_machine_type=None, hw_firmware_type=None):
@@ -22996,18 +23043,18 @@ class HostStateTestCase(test.NoDBTestCase):
 
         drvr = HostStateTestCase.FakeConnection()
 
-        stats = drvr.get_available_resource("compute1")
-        self.assertEqual(stats["vcpus"], 1)
-        self.assertEqual(stats["memory_mb"], 497)
-        self.assertEqual(stats["local_gb"], 100)
-        self.assertEqual(stats["vcpus_used"], 0)
-        self.assertEqual(stats["memory_mb_used"], 88)
-        self.assertEqual(stats["local_gb_used"], 20)
-        self.assertEqual(stats["hypervisor_type"], 'QEMU')
-        self.assertEqual(stats["hypervisor_version"],
+        res = drvr.get_available_resource("compute1")
+        self.assertEqual(res["vcpus"], 1)
+        self.assertEqual(res["memory_mb"], 497)
+        self.assertEqual(res["local_gb"], 100)
+        self.assertEqual(res["vcpus_used"], 0)
+        self.assertEqual(res["memory_mb_used"], 88)
+        self.assertEqual(res["local_gb_used"], 20)
+        self.assertEqual(res["hypervisor_type"], 'QEMU')
+        self.assertEqual(res["hypervisor_version"],
                          fakelibvirt.FAKE_QEMU_VERSION)
-        self.assertEqual(stats["hypervisor_hostname"], 'compute1')
-        cpu_info = jsonutils.loads(stats["cpu_info"])
+        self.assertEqual(res["hypervisor_hostname"], 'compute1')
+        cpu_info = jsonutils.loads(res["cpu_info"])
         self.assertEqual(cpu_info,
                 {"vendor": "Intel", "model": "pentium",
                  "arch": fields.Architecture.I686,
@@ -23017,12 +23064,13 @@ class HostStateTestCase(test.NoDBTestCase):
                  "topology": {"cores": "1", "threads": "1", "sockets": "1"},
                  "maxphysaddr": {"mode": "emulate", "bits": "42"}
                 })
-        self.assertEqual(stats["disk_available_least"], 80)
-        self.assertEqual(jsonutils.loads(stats["pci_passthrough_devices"]),
+        self.assertEqual(res["disk_available_least"], 80)
+        self.assertEqual(jsonutils.loads(res["pci_passthrough_devices"]),
                          HostStateTestCase.pci_devices)
         self.assertEqual(objects.NUMATopology.obj_from_db_obj(
-                            stats['numa_topology']),
+                            res['numa_topology']),
                          HostStateTestCase.numa_topology)
+        self.assertEqual(res['stats']['uptime'], drvr.get_host_uptime())
 
 
 class TestUpdateProviderTree(test.NoDBTestCase):
