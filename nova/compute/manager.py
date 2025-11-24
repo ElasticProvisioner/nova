@@ -1628,16 +1628,6 @@ class ComputeManager(manager.Manager):
     def init_host(self, service_ref):
         """Initialization for a standalone compute service."""
 
-        if service_ref:
-            # If we are an existing service, check to see if we need
-            # to record a locally-persistent node identity because
-            # we have upgraded from a previous version.
-            self._ensure_existing_node_identity(service_ref)
-        else:
-            # If we are a new service (in the database), make sure we have no
-            # instances on our hypervisor as we would expect.
-            self._sanity_check_new_host()
-
         if CONF.pci.device_spec:
             # Simply loading the PCI passthrough spec will do a bunch of
             # validation that would otherwise wait until the PciDevTracker is
@@ -1671,6 +1661,16 @@ class ComputeManager(manager.Manager):
             raise exception.InvalidConfiguration(msg)
 
         self.driver.init_host(host=self.host)
+
+        if service_ref:
+            # If we are an existing service, check to see if we need
+            # to record a locally-persistent node identity because
+            # we have upgraded from a previous version.
+            self._ensure_existing_node_identity(service_ref)
+        else:
+            # If we are a new service (in the database), make sure we have no
+            # instances on our hypervisor as we would expect.
+            self._sanity_check_new_host()
 
         # NOTE(gibi): At this point the compute_nodes of the resource tracker
         # has not been populated yet so we cannot rely on the resource tracker
@@ -2736,7 +2736,8 @@ class ComputeManager(manager.Manager):
                 exception.VirtualInterfaceMacAddressException,
                 exception.FixedIpInvalidOnHost,
                 exception.UnableToAutoAllocateNetwork,
-                exception.NetworksWithQoSPolicyNotSupported) as e:
+                exception.NetworksWithQoSPolicyNotSupported,
+                exception.VTPMSecretForbidden) as e:
             LOG.exception('Failed to allocate network(s)',
                           instance=instance)
             self._notify_about_instance_usage(context, instance,
@@ -3515,6 +3516,7 @@ class ComputeManager(manager.Manager):
     # NOTE(johannes): This is probably better named power_on_instance
     # so it matches the driver method, but because of other issues, we
     # can't use that name in grizzly.
+    @messaging.expected_exceptions(exception.VTPMSecretForbidden)
     @wrap_exception()
     @reverts_task_state
     @wrap_instance_event(prefix='compute')
@@ -4384,6 +4386,7 @@ class ComputeManager(manager.Manager):
 
         return share_info
 
+    @messaging.expected_exceptions(exception.VTPMSecretForbidden)
     @wrap_exception()
     @reverts_task_state
     @wrap_instance_event(prefix='compute')

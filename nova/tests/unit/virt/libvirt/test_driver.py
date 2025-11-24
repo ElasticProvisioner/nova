@@ -1226,6 +1226,19 @@ class LibvirtConnTestCase(test.NoDBTestCase,
     @mock.patch.object(libvirt_driver.LibvirtDriver,
                        '_register_all_undefined_instance_details',
                        new=mock.Mock())
+    @mock.patch.object(fakelibvirt.Connection, 'getVersion',
+                       return_value=versionutils.convert_version_to_int(
+                            (9, 1, 0)))
+    def test_qemu_multifd_with_postcopy_version_ok(self, mock_gv):
+        self.flags(live_migration_parallel_connections=2,
+                   live_migration_permit_post_copy=True,
+                   group='libvirt')
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+        self.assertRaises(exception.InternalError, drvr.init_host, "dummyhost")
+
+    @mock.patch.object(libvirt_driver.LibvirtDriver,
+                       '_register_all_undefined_instance_details',
+                       new=mock.Mock())
     @mock.patch.object(fakelibvirt.Connection, 'getLibVersion',
                        return_value=versionutils.convert_version_to_int(
                             libvirt_driver.NEXT_MIN_LIBVIRT_VERSION))
@@ -2001,6 +2014,21 @@ class LibvirtConnTestCase(test.NoDBTestCase,
                          libvirt_driver.libvirt.VIR_MIGRATE_LIVE |
                          libvirt_driver.libvirt.VIR_MIGRATE_NON_SHARED_INC |
                          libvirt_driver.libvirt.VIR_MIGRATE_AUTO_CONVERGE))
+
+    def test_live_migration_parallel_connections_enabled(self):
+        self.flags(live_migration_parallel_connections=2, group='libvirt')
+        self._do_test_parse_migration_flags(
+            lm_expected=(libvirt_driver.libvirt.VIR_MIGRATE_UNDEFINE_SOURCE |
+                         libvirt_driver.libvirt.VIR_MIGRATE_PERSIST_DEST |
+                         libvirt_driver.libvirt.VIR_MIGRATE_PEER2PEER |
+                         libvirt_driver.libvirt.VIR_MIGRATE_LIVE |
+                         libvirt_driver.libvirt.VIR_MIGRATE_PARALLEL),
+            bm_expected=(libvirt_driver.libvirt.VIR_MIGRATE_UNDEFINE_SOURCE |
+                         libvirt_driver.libvirt.VIR_MIGRATE_PERSIST_DEST |
+                         libvirt_driver.libvirt.VIR_MIGRATE_PEER2PEER |
+                         libvirt_driver.libvirt.VIR_MIGRATE_LIVE |
+                         libvirt_driver.libvirt.VIR_MIGRATE_NON_SHARED_INC |
+                         libvirt_driver.libvirt.VIR_MIGRATE_PARALLEL))
 
     def test_live_migration_permit_auto_converge_and_post_copy_true(self):
         self.flags(live_migration_permit_auto_converge=True, group='libvirt')
@@ -14137,6 +14165,54 @@ class LibvirtConnTestCase(test.NoDBTestCase,
     @mock.patch.object(fakelibvirt.virDomain, "migrateToURI3")
     @mock.patch('nova.virt.libvirt.migration.get_updated_guest_xml',
                 return_value='')
+    @mock.patch('nova.virt.libvirt.guest.Guest.get_xml_desc', return_value='')
+    def test_block_live_parallel_connections(
+            self, mock_old_xml, mock_new_xml,
+            mock_migrateToURI3, mock_min_version):
+        self.flags(live_migration_parallel_connections=5, group='libvirt')
+        target_connection = None
+        disk_paths = ['vda', 'vdb']
+
+        params = {
+            'bandwidth': CONF.libvirt.live_migration_bandwidth,
+            'migrate_disks': disk_paths,
+            'parallel.connections':
+                CONF.libvirt.live_migration_parallel_connections
+        }
+
+        # Start test
+        migrate_data = objects.LibvirtLiveMigrateData(
+            graphics_listen_addr_vnc='0.0.0.0',
+            graphics_listen_addr_spice='0.0.0.0',
+            serial_listen_addr='127.0.0.1',
+            serial_listen_ports=[1234],
+            target_connect_addr=target_connection,
+            bdms=[],
+            block_migration=True)
+
+        dom = fakelibvirt.virDomain
+        guest = libvirt_guest.Guest(dom)
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), False)
+        drvr._parse_migration_flags()
+        instance = objects.Instance(**self.test_instance)
+        drvr._live_migration_operation(self.context, instance,
+                                       target_connection, True, migrate_data,
+                                       guest, disk_paths)
+
+        expected_flags = (fakelibvirt.VIR_MIGRATE_UNDEFINE_SOURCE |
+                          fakelibvirt.VIR_MIGRATE_PERSIST_DEST |
+                          fakelibvirt.VIR_MIGRATE_PEER2PEER |
+                          fakelibvirt.VIR_MIGRATE_NON_SHARED_INC |
+                          fakelibvirt.VIR_MIGRATE_LIVE |
+                          fakelibvirt.VIR_MIGRATE_PARALLEL)
+        mock_migrateToURI3.assert_called_once_with(
+            drvr._live_migration_uri(target_connection),
+            params=params, flags=expected_flags)
+
+    @mock.patch.object(host.Host, 'has_min_version', return_value=True)
+    @mock.patch.object(fakelibvirt.virDomain, "migrateToURI3")
+    @mock.patch('nova.virt.libvirt.migration.get_updated_guest_xml',
+                return_value='')
     def test_live_migration_paused_instance_postcopy(self, mock_new_xml,
                                                      mock_migrateToURI3,
                                                      mock_min_version):
@@ -20902,6 +20978,55 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         # ...and undefined it after, despite the error
         drvr._host.create_secret.return_value.undefine.assert_called_once()
 
+    @mock.patch('nova.virt.libvirt.host.Host')
+    @mock.patch('nova.crypto.ensure_vtpm_secret')
+    def test_get_or_create_secret_for_vtpm_host_security_found(
+            self, mock_secret, mock_host):
+        """Test that the key manager service API is not called.
+
+        If the secret can be found locally from libvirt with 'host' TPM secret
+        security, there should be no call to the key manager API.
+        """
+        instance = objects.Instance(**self.test_instance)
+        instance.flavor.extra_specs = {'hw:tpm_secret_security': 'host'}
+        mock_host.return_value.find_secret.return_value = mock.sentinel.secret
+
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+        secret, security = drvr._get_or_create_secret_for_vtpm(self.context,
+                                                               instance)
+
+        mock_secret.assert_not_called()
+        self.assertEqual(mock.sentinel.secret, secret)
+        self.assertEqual('host', security)
+
+    @mock.patch('nova.virt.libvirt.host.Host')
+    @mock.patch('nova.crypto.ensure_vtpm_secret')
+    def test_get_or_create_secret_for_vtpm_host_security_not_found(
+            self, mock_secret, mock_host):
+        """Test that the key manager service API is called.
+
+        If the secret is not found locally from libvirt with 'host' TPM secret
+        security, there should be a call to the key manager API.
+        """
+        instance = objects.Instance(**self.test_instance)
+        instance.flavor.extra_specs = {'hw:tpm_secret_security': 'host'}
+        mock_host.return_value.find_secret.return_value = None
+        mock_secret.return_value = (uuids.secret, mock.sentinel.passphrase)
+
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+        secret, security = drvr._get_or_create_secret_for_vtpm(self.context,
+                                                               instance)
+
+        mock_secret.assert_called_once_with(self.context, instance)
+        # ensure_vtpm_secret() returns (secret_uuid, passphrase)
+        mock_host.return_value.create_secret.assert_called_once_with(
+            'vtpm', uuids.instance, password=mock.sentinel.passphrase,
+            uuid=uuids.secret, ephemeral=False, private=False)
+
+        self.assertEqual(
+            mock_host.return_value.create_secret.return_value, secret)
+        self.assertEqual('host', security)
+
     @mock.patch('nova.virt.disk.api.clean_lxc_namespace')
     @mock.patch('nova.virt.libvirt.driver.LibvirtDriver.get_info')
     @mock.patch('nova.virt.disk.api.setup_container')
@@ -23426,6 +23551,30 @@ class TestUpdateProviderTree(test.NoDBTestCase):
                 'COMPUTE_SECURITY_TPM_TIS', 'COMPUTE_SECURITY_TPM_CRB',
                 'COMPUTE_SECURITY_TPM_2_0', 'COMPUTE_SECURITY_TPM_1_2'):
             self.assertIn(trait, self.pt.data(self.cn_rp['uuid']).traits)
+
+    def test_update_provider_tree_with_tpm_secret_security_traits(self):
+        self.flags(swtpm_enabled=True, group='libvirt')
+        self.flags(
+            supported_tpm_secret_security=['user', 'host', 'deployment'],
+            group='libvirt')
+        self._test_update_provider_tree()
+        for trait in (
+            'COMPUTE_SECURITY_TPM_SECRET_SECURITY_USER',
+            'COMPUTE_SECURITY_TPM_SECRET_SECURITY_HOST',
+            'COMPUTE_SECURITY_TPM_SECRET_SECURITY_DEPLOYMENT'
+        ):
+            self.assertIn(trait, self.pt.data(self.cn_rp['uuid']).traits)
+
+    def test_update_provider_tree_with_tpm_secret_security_traits_none(self):
+        self.flags(swtpm_enabled=True, group='libvirt')
+        self.flags(supported_tpm_secret_security=[], group='libvirt')
+        self._test_update_provider_tree()
+        for trait in (
+            'COMPUTE_SECURITY_TPM_SECRET_SECURITY_USER',
+            'COMPUTE_SECURITY_TPM_SECRET_SECURITY_HOST',
+            'COMPUTE_SECURITY_TPM_SECRET_SECURITY_DEPLOYMENT'
+        ):
+            self.assertNotIn(trait, self.pt.data(self.cn_rp['uuid']).traits)
 
     @mock.patch.object(
         fakelibvirt.virConnect, '_domain_capability_devices', new=
@@ -27707,7 +27856,7 @@ class LibvirtDriverTestCase(test.NoDBTestCase, TraitsComparisonMixin):
         instance = objects.Instance(
             uuid=uuids.instance, id=1,
             ephemeral_key_uuid=uuids.ephemeral_key_uuid,
-            resources=None)
+            resources=None, flavor=objects.Flavor())
         instance.system_metadata = {}
         block_device_info = {'root_device_name': '/dev/vda',
                              'ephemerals': [],

@@ -516,12 +516,16 @@ class InstanceHelperMixin:
         self.api.delete_server(server['id'])
         self._wait_until_deleted(server)
 
-    def _reboot_server(self, server, hard=False, expected_state='ACTIVE'):
+    def _reboot_server(self, server, hard=False, expected_state='ACTIVE',
+                       api=None):
         """Reboot a server."""
-        self.api.post_server_action(
+        api = api or self.api
+        api.post_server_action(
             server['id'], {'reboot': {'type': 'HARD' if hard else 'SOFT'}},
         )
-        self.notifier.wait_for_versioned_notifications('instance.reboot.end')
+        if expected_state != 'ERROR':
+            self.notifier.wait_for_versioned_notifications(
+                    'instance.reboot.end')
         return self._wait_for_state_change(server, expected_state)
 
     def _show_server(self, server):
@@ -581,6 +585,17 @@ class InstanceHelperMixin:
         self.notifier.wait_for_versioned_notifications(
             'instance.share_detach.error')
 
+    def _attach_volume(self, server, volume_id):
+        """attach a cinder volume to a server."""
+        attachment = self.api.post_server_volume(
+            server['id'],
+            {'volumeAttachment': {'volumeId': volume_id}}
+        )
+        self._wait_for_volume_attach(server['id'], volume_id)
+        self.notifier.wait_for_versioned_notifications(
+            'instance.volume_attach.end')
+        return attachment
+
     def _rebuild_server(self, server, image_uuid, expected_state='ACTIVE'):
         """Rebuild a server."""
         self.api.post_server_action(
@@ -589,11 +604,13 @@ class InstanceHelperMixin:
         self.notifier.wait_for_versioned_notifications('instance.rebuild.end')
         return self._wait_for_state_change(server, expected_state)
 
-    def _migrate_server(self, server, host=None):
+    def _migrate_server(self, server, host=None,
+                        expected_state='VERIFY_RESIZE', api=None):
         """Cold migrate a server."""
         body = {'host': host} if host else None
-        self.api.post_server_action(server['id'], {'migrate': body})
-        return self._wait_for_state_change(server, 'VERIFY_RESIZE')
+        api = api or self.api
+        api.post_server_action(server['id'], {'migrate': body})
+        return self._wait_for_state_change(server, expected_state)
 
     def _resize_server(self, server, flavor_id):
         self.api.post_server_action(

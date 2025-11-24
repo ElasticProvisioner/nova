@@ -371,6 +371,30 @@ Related options:
 * live_migration_downtime_steps
 * live_migration_downtime_delay
 """),
+    cfg.IntOpt('live_migration_parallel_connections',
+               default=1,
+               help="""
+Number of parallel connections to QEMU during live migrations.
+
+Values above 1 will instruct hypervisor explicitly on amount of connections
+to use.
+Please note, that each connection can utilize up to 1 CPU core, especially when
+``live_migration_with_native_tls`` is used. Therefore it is recommended to
+reserve CPUs using ``cpu_shared_set``/``cpu_dedicated_set`` or
+``reserved_host_cpus`` multiplied by ``cpu_allocation_ratio``.
+
+Usage of ``live_migration_parallel_connections`` in
+combination with ``live_migration_permit_post_copy`` is supported only with
+`QEMU>=10.1.0 <https://www.qemu.org/2025/08/26/qemu-10-1-0/>`_.
+
+Related options:
+
+* ``[compute] cpu_shared_set``
+* ``[compute] cpu_dedicated_set``
+* ``[DEFAULT] reserved_host_cpus``
+* ``[libvirt] live_migration_permit_post_copy``
+
+"""),
     cfg.StrOpt('live_migration_timeout_action',
                default='abort',
                choices=('abort', 'force_complete'),
@@ -411,10 +435,15 @@ When using post-copy mode, if the source and destination hosts lose network
 connectivity, the VM being live-migrated will need to be rebooted. For more
 details, please see the Administration guide.
 
+Usage of the option together with ``live_migration_parallel_connections``
+is supported only with QEMU>=10.1.0. Otherwise VM will end up in SHUTOFF
+state on the destination host.
+
 Related options:
 
 * live_migration_permit_auto_converge
 * live_migration_timeout_action
+* live_migration_parallel_connections
 """),
     cfg.BoolOpt('live_migration_permit_auto_converge',
                 default=False,
@@ -1605,6 +1634,24 @@ ownership after being moved between nodes.
 Related options:
 
 * ``swtpm_user`` must also be set.
+"""),
+    cfg.ListOpt('supported_tpm_secret_security',
+        default=['user', 'host'],
+        help="""
+The list of TPM security policies supported by this compute host. If a value is
+absent, it is not supported by this host, and any instance that requests it
+will not be scheduled on this host.
+
+Possible values are:
+
+* ``user``: The Barbican secret is owned by the instance owner and cannot be
+  accessed by anyone else. The Libvirt secret is private and non-persistent.
+  The instance cannot be live-migrated or automatically resumed after host
+  reboot.
+* ``host``: The Barbican secret is owned by the instance owner and cannot be
+  accessed by anyone else. The Libvirt secret is public and persistent. It
+  can be read by anyone with sufficient access on the host. The instance can
+  be live-migrated and automatically resumed after host reboot.
 """),
 ]
 

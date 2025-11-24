@@ -127,6 +127,8 @@ VIR_MIGRATE_PERSIST_DEST = 8
 VIR_MIGRATE_UNDEFINE_SOURCE = 16
 VIR_MIGRATE_NON_SHARED_INC = 128
 VIR_MIGRATE_AUTO_CONVERGE = 8192
+VIR_MIGRATE_PARALLEL = 131072
+VIR_MIGRATE_PARAM_PARALLEL_CONNECTIONS = 'parallel.connections'
 VIR_MIGRATE_POSTCOPY = 32768
 VIR_MIGRATE_TLS = 65536
 
@@ -196,6 +198,7 @@ VIR_SECRET_USAGE_TYPE_NONE = 0
 VIR_SECRET_USAGE_TYPE_VOLUME = 1
 VIR_SECRET_USAGE_TYPE_CEPH = 2
 VIR_SECRET_USAGE_TYPE_ISCSI = 3
+VIR_SECRET_USAGE_TYPE_VTPM = 5
 
 # metadata types
 VIR_DOMAIN_METADATA_DESCRIPTION = 0
@@ -1832,12 +1835,15 @@ class Secret(object):
     def _parse_xml(self, xml):
         tree = etree.fromstring(xml)
         self._uuid = tree.find('./uuid').text
+        self._ephemeral = tree.get('ephemeral') == 'yes'
         self._private = tree.get('private') == 'yes'
         self._usage_id = None
         usage = tree.find('./usage')
         if usage is not None:
             if usage.get('type') == 'volume':
                 self._usage_id = usage.find('volume').text
+            if usage.get('type') == 'vtpm':
+                self._usage_id = usage.find('name').text
 
     def setValue(self, value, flags=0):
         self._value = value
@@ -1908,6 +1914,12 @@ class Connection(object):
         self._id_counter = 1  # libvirt reserves 0 for the hypervisor.
         self._nodedevs = {}
         self._secrets = {}
+        # NOTE(artom) The secret is undefined as soon as the guest has
+        # successfully started, but we still want to assert that is had been
+        # defined in this libvirt connection. We therefore keep a history of
+        # self._removed_secrets to allow functional tests to make those
+        # assertions.
+        self._removed_secrets = {}
         self._event_callbacks = {}
         self.fakeLibVersion = version
         self.fakeVersion = hv_version
@@ -1929,7 +1941,7 @@ class Connection(object):
         self._secrets[secret._uuid] = secret
 
     def _remove_secret(self, secret):
-        del self._secrets[secret._uuid]
+        self._removed_secrets[secret._uuid] = self._secrets.pop(secret._uuid)
 
     def _mark_running(self, dom):
         self._running_vms[self._id_counter] = dom

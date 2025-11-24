@@ -21,12 +21,14 @@ import ddt
 import eventlet
 from eventlet import greenthread
 from eventlet import tpool
+from lxml import etree
 from oslo_serialization import jsonutils
 from oslo_utils.fixture import uuidsentinel as uuids
 from oslo_utils import uuidutils
 from oslo_utils import versionutils
 import testtools
 
+from nova.compute import manager
 from nova.compute import vm_states
 from nova import exception
 from nova import objects
@@ -459,8 +461,12 @@ class HostTestCase(test.NoDBTestCase):
 
     @mock.patch.object(host.Host, "_connect")
     def test_conn_event_thread(self, mock_conn):
-        event = eventlet.event.Event()
-        h = host.Host("qemu:///system", conn_event_handler=event.send)
+        event = manager.ThreadingEventWithResult()
+
+        # This emulates LibvirtDriver._handle_conn_event
+        def conn_event_handler(*args, **kwargs):
+            event.set()
+        h = host.Host("qemu:///system", conn_event_handler=conn_event_handler)
         h.initialize()
 
         h.get_connection()
@@ -1045,6 +1051,21 @@ class HostTestCase(test.NoDBTestCase):
         mock_sec.return_value = secret
         self.host.create_secret('iscsi', 'iscsivol', password="foo")
         secret.setValue.assert_called_once_with("foo")
+
+    @mock.patch.object(fakelibvirt.virConnect, "secretDefineXML")
+    def test_create_secret_vtpm_ephemeral_private_default(self, mock_sec):
+        self.host.create_secret('vtpm', uuids.instance)
+        xml = etree.fromstring(mock_sec.call_args.args[0])
+        self.assertEqual('yes', xml.get('ephemeral'))
+        self.assertEqual('yes', xml.get('private'))
+
+    @mock.patch.object(fakelibvirt.virConnect, "secretDefineXML")
+    def test_create_secret_vtpm_not_ephemeral_private(self, mock_sec):
+        self.host.create_secret('vtpm', uuids.instance, ephemeral=False,
+                                private=False)
+        xml = etree.fromstring(mock_sec.call_args.args[0])
+        self.assertEqual('no', xml.get('ephemeral'))
+        self.assertEqual('no', xml.get('private'))
 
     @mock.patch('nova.virt.libvirt.host.Host.find_secret')
     def test_delete_secret(self, mock_find_secret):

@@ -262,6 +262,9 @@ MIN_VFIO_PCI_VARIANT_QEMU_VERSION = (8, 2, 2)
 MIN_VIRTIO_SOUND_LIBVIRT_VERSION = (10, 4, 0)
 MIN_VIRTIO_SOUND_QEMU_VERSION = (8, 2, 0)
 
+# Minimum version of Qemu that supports multifd migration with post-copy
+MIN_MULTIFD_WITH_POSTCOPY_QEMU_VERSION = (10, 1, 0)
+
 REGISTER_IMAGE_PROPERTY_DEFAULTS = [
     'hw_machine_type',
     'hw_cdrom_bus',
@@ -814,6 +817,16 @@ class LibvirtDriver(driver.ComputeDriver):
                 raise exception.InternalError(
                     _('Nova requires QEMU version %s or greater.') %
                     libvirt_utils.version_to_string(MIN_QEMU_VERSION))
+        if (CONF.libvirt.virt_type in ("qemu", "kvm") and
+                CONF.libvirt.live_migration_parallel_connections > 1 and
+                CONF.libvirt.live_migration_permit_post_copy is True):
+            if not self._host.has_min_version(
+                    hv_ver=MIN_MULTIFD_WITH_POSTCOPY_QEMU_VERSION):
+                raise exception.InternalError(
+                    _('Nova requires QEMU version %s or greater to use '
+                      'live migration parallel connections with post-copy.') %
+                    libvirt_utils.version_to_string(
+                        MIN_MULTIFD_WITH_POSTCOPY_QEMU_VERSION))
 
         if CONF.libvirt.virt_type == 'parallels':
             if not self._host.has_min_version(hv_ver=MIN_VIRTUOZZO_VERSION):
@@ -1354,6 +1367,11 @@ class LibvirtDriver(driver.ComputeDriver):
             migration_flags |= libvirt.VIR_MIGRATE_AUTO_CONVERGE
         return migration_flags
 
+    def _handle_live_migration_parallel(self, migration_flags):
+        if CONF.libvirt.live_migration_parallel_connections > 1:
+            migration_flags |= libvirt.VIR_MIGRATE_PARALLEL
+        return migration_flags
+
     def _parse_migration_flags(self):
         (live_migration_flags,
             block_migration_flags) = self._prepare_migration_flags()
@@ -1376,6 +1394,11 @@ class LibvirtDriver(driver.ComputeDriver):
         live_migration_flags = self._handle_live_migration_auto_converge(
             live_migration_flags)
         block_migration_flags = self._handle_live_migration_auto_converge(
+            block_migration_flags)
+
+        live_migration_flags = self._handle_live_migration_parallel(
+            live_migration_flags)
+        block_migration_flags = self._handle_live_migration_parallel(
             block_migration_flags)
 
         self._live_migration_flags = live_migration_flags
@@ -1770,6 +1793,9 @@ class LibvirtDriver(driver.ComputeDriver):
                 pass
 
         if cleanup_instance_disks:
+            if hardware.get_tpm_secret_security_constraint(
+                    instance.flavor) == 'host':
+                self._host.delete_secret('vtpm', instance.uuid)
             # Make sure that the instance directory files were successfully
             # deleted before destroying the encryption secrets in the case of
             # image backends that are not 'lvm' or 'rbd'. We don't want to
@@ -8149,6 +8175,43 @@ class LibvirtDriver(driver.ComputeDriver):
         finally:
             self._create_domain_cleanup_lxc(instance)
 
+    def _get_or_create_secret_for_vtpm(
+        self,
+        context: nova_context.RequestContext,
+        instance: 'objects.Instance',
+    ) -> ty.Tuple[ty.Any, ty.Optional[str]]:
+        """Get or create a libvirt vTPM secret.
+
+        For 'host' TPM secret security, this will look for a local libvirt
+        secret first and only call the key manager service API if it does not
+        find one.
+
+        For all others, it will call the key manager service API to get or
+        create a secret and then use it to create a libvirt secret.
+        """
+        security = hardware.get_tpm_secret_security_constraint(
+                instance.flavor) or 'user'
+
+        libvirt_secret = None
+        kwargs = {}
+        if security == 'host':
+            # First try to look up the secret locally. If it's not found, we
+            # we will get None returned and we can still create it below.
+            libvirt_secret = self._host.find_secret('vtpm', instance.uuid)
+            # create_secret() already contains logic to default to the most
+            # secure ephemeral and private for TPM, so just specify if we
+            # don't want that.
+            kwargs = {'ephemeral': False, 'private': False}
+
+        if libvirt_secret is None:
+            secret_uuid, passphrase = crypto.ensure_vtpm_secret(context,
+                                                                instance)
+            libvirt_secret = self._host.create_secret(
+                'vtpm', instance.uuid, password=passphrase, uuid=secret_uuid,
+                **kwargs)
+
+        return libvirt_secret, security
+
     def _create_guest(
         self,
         context: nova_context.RequestContext,
@@ -8166,15 +8229,13 @@ class LibvirtDriver(driver.ComputeDriver):
         :returns guest.Guest: Created guest.
         """
         libvirt_secret = None
+        secret_security = None
         # determine whether vTPM is in use and, if so, create the secret
         if CONF.libvirt.swtpm_enabled and hardware.get_vtpm_constraint(
             instance.flavor, instance.image_meta,
         ):
-            secret_uuid, passphrase = crypto.ensure_vtpm_secret(
-                context, instance)
-            libvirt_secret = self._host.create_secret(
-                'vtpm', instance.uuid, password=passphrase,
-                uuid=secret_uuid)
+            libvirt_secret, secret_security = (
+                    self._get_or_create_secret_for_vtpm(context, instance))
 
         try:
             guest = libvirt_guest.Guest.create(xml, self._host)
@@ -8187,7 +8248,7 @@ class LibvirtDriver(driver.ComputeDriver):
 
             return guest
         finally:
-            if libvirt_secret is not None:
+            if libvirt_secret is not None and secret_security != 'host':
                 libvirt_secret.undefine()
 
     def _neutron_failed_callback(self, event_name, instance):
@@ -11173,12 +11234,14 @@ class LibvirtDriver(driver.ComputeDriver):
                 serial_ports = list(self._get_serial_ports_from_guest(guest))
 
             LOG.debug("About to invoke the migrate API", instance=instance)
-            guest.migrate(self._live_migration_uri(dest),
-                          migrate_uri=migrate_uri,
-                          flags=migration_flags,
-                          migrate_disks=device_names,
-                          destination_xml=new_xml_str,
-                          bandwidth=CONF.libvirt.live_migration_bandwidth)
+            guest.migrate(
+                self._live_migration_uri(dest),
+                migrate_uri=migrate_uri,
+                flags=migration_flags,
+                migrate_disks=device_names,
+                destination_xml=new_xml_str,
+                bandwidth=CONF.libvirt.live_migration_bandwidth,
+                parallel=CONF.libvirt.live_migration_parallel_connections)
             LOG.debug("Migrate API has completed", instance=instance)
 
             for hostname, port in serial_ports:
@@ -13312,6 +13375,16 @@ class LibvirtDriver(driver.ComputeDriver):
                 ot.COMPUTE_SECURITY_TPM_2_0: '2.0' in tpm_versions,
                 ot.COMPUTE_SECURITY_TPM_1_2: '1.2' in tpm_versions,
             })
+
+        if 'user' in CONF.libvirt.supported_tpm_secret_security:
+            tr.update({
+                ot.COMPUTE_SECURITY_TPM_SECRET_SECURITY_USER: True})
+        if 'host' in CONF.libvirt.supported_tpm_secret_security:
+            tr.update({
+                ot.COMPUTE_SECURITY_TPM_SECRET_SECURITY_HOST: True})
+        if 'deployment' in CONF.libvirt.supported_tpm_secret_security:
+            tr.update({
+                ot.COMPUTE_SECURITY_TPM_SECRET_SECURITY_DEPLOYMENT: True})
 
         return tr
 
