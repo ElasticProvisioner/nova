@@ -26,6 +26,7 @@ import logging as std_logging
 import os
 import sys
 import time
+import traceback
 from unittest import mock
 import warnings
 
@@ -420,7 +421,6 @@ class CellDatabases(fixtures.Fixture):
     def _cache_schema(self, connection_str):
         # NOTE(melwitt): See the regular Database fixture for why
         # we do this.
-        global DB_SCHEMA
         if not DB_SCHEMA[('main', None)]:
             ctxt_mgr = self._ctxt_mgrs[connection_str]
             engine = ctxt_mgr.writer.get_engine()
@@ -706,7 +706,6 @@ class Database(fixtures.Fixture):
         self.addCleanup(self.cleanup)
 
     def _apply_schema(self):
-        global DB_SCHEMA
         if not DB_SCHEMA[(self.database, self.version)]:
             # apply and cache schema
             engine = self.get_engine()
@@ -2183,3 +2182,35 @@ class UnifiedLimitsFixture(fixtures.Fixture):
         pl.region_id = attrs.get('region_id')
         pl.service_id = attrs.get('service_id')
         self.limits_list.append(pl)
+
+
+class RPCPollerCleanupFixture(fixtures.Fixture):
+    def setUp(self):
+        super().setUp()
+        orig_start = (
+            messaging._drivers.base.PollStyleListenerAdapter.start)
+
+        def wrapped_start(_self, *args, **kwargs):
+            stack = "".join(traceback.format_stack())
+            self.addCleanup(lambda: self._check_listener_stopped(_self, stack))
+            return orig_start(_self, *args, **kwargs)
+
+        self.useFixture(
+            fixtures.MonkeyPatch(
+                'oslo_messaging._drivers.base.'
+                'PollStyleListenerAdapter.start',
+                wrapped_start))
+
+    @staticmethod
+    def _check_listener_stopped(
+        listener: messaging._drivers.base.PollStyleListenerAdapter,
+        stack: str,
+    ):
+        if listener._started:
+            raise RuntimeError(
+                'The test case leaked an active oslo_messaging poller thread. '
+                'This can lead to unexpected failures in later test case. '
+                'Please stop the RPC server or the nova.service.Service '
+                'instance in your test case e.g. by using '
+                'self.addCleanup(...). The test started the poller at the '
+                'following place:\n%s' % stack)
