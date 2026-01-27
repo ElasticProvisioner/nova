@@ -17,7 +17,6 @@
 import itertools
 
 from oslo_log import log as logging
-from oslo_serialization import jsonutils
 
 from nova.api.openstack import api_version_request
 from nova.api.openstack import common
@@ -76,7 +75,7 @@ class ViewBuilder(common.ViewBuilder):
         self._flavor_builder = views_flavors.ViewBuilder()
         self.compute_api = compute.API()
 
-    def create(self, request, instance):
+    def create(self, request, body, instance):
         """View that should be returned when an instance is created."""
 
         server = {
@@ -92,8 +91,11 @@ class ViewBuilder(common.ViewBuilder):
                     'AUTO' if instance.get('auto_disk_config') else 'MANUAL'),
             },
         }
-        self._add_security_grps(request, [server["server"]], [instance],
-                                create_request=True)
+
+        # Add security group to server, if no security group was in
+        # request add default since that is the group it is part of
+        server['server']['security_groups'] = body['server'].get(
+            'security_groups', [{'name': 'default'}])
 
         return server
 
@@ -186,7 +188,7 @@ class ViewBuilder(common.ViewBuilder):
             if show_server_groups:
                 context = request.environ['nova.context']
                 ret['server']['server_groups'] = self._get_server_groups(
-                                                             context, instance)
+                    context, instance)
         return ret
 
     @staticmethod
@@ -290,25 +292,24 @@ class ViewBuilder(common.ViewBuilder):
 
         server = {
             "server": {
+                "accessIPv4": str(ip_v4) if ip_v4 is not None else '',
+                "accessIPv6": str(ip_v6) if ip_v6 is not None else '',
+                "addresses": self._get_addresses(
+                    request, instance, extend_address),
+                "created": utils.isotime(instance["created_at"]),
+                "flavor": self._get_flavor(
+                    request, instance, show_extra_specs),
+                "hostId": self._get_host_id(instance),
                 "id": instance["uuid"],
+                "image": self._get_image(request, instance),
+                "links": self._get_links(
+                    request, instance["uuid"], self._collection_name),
+                "metadata": self._get_metadata(instance),
                 "name": instance["display_name"],
                 "status": self._get_vm_status(instance),
                 "tenant_id": instance.get("project_id") or "",
                 "user_id": instance.get("user_id") or "",
-                "metadata": self._get_metadata(instance),
-                "hostId": self._get_host_id(instance),
-                "image": self._get_image(request, instance),
-                "flavor": self._get_flavor(request, instance,
-                                           show_extra_specs),
-                "created": utils.isotime(instance["created_at"]),
                 "updated": utils.isotime(instance["updated_at"]),
-                "addresses": self._get_addresses(request, instance,
-                                                 extend_address),
-                "accessIPv4": str(ip_v4) if ip_v4 is not None else '',
-                "accessIPv6": str(ip_v6) if ip_v6 is not None else '',
-                "links": self._get_links(request,
-                                         instance["uuid"],
-                                         self._collection_name),
                 # NOTE(sdague): historically this was the
                 # os-disk-config extension, but now that extensions
                 # are gone, we merge these attributes here.
@@ -332,14 +333,6 @@ class ViewBuilder(common.ViewBuilder):
             # attributes after v2.1. They are only in v2.1 for backward compat
             # with v2.0.
             server["server"]["OS-EXT-AZ:availability_zone"] = az or ''
-            if api_version_request.is_supported(request, '2.96'):
-                pinned_az = self._get_pinned_az(context, instance, provided_az)
-                server['server']['pinned_availability_zone'] = pinned_az
-
-        if api_version_request.is_supported(request, '2.100'):
-            server['server']['scheduler_hints'] = (
-                    self._get_scheduler_hints(
-                        context, instance, provided_sched_hints))
 
         if show_config_drive:
             server["server"]["config_drive"] = instance["config_drive"]
@@ -409,14 +402,13 @@ class ViewBuilder(common.ViewBuilder):
             # NOTE(mriedem): The os-extended-volumes prefix should not be used
             # for new attributes after v2.1. They are only in v2.1 for backward
             # compat with v2.0.
-            add_delete_on_termination = api_version_request.is_supported(
-                request, '2.3')
             if bdms is None:
                 bdms = objects.BlockDeviceMappingList.bdms_by_instance_uuid(
                     context, [instance["uuid"]])
-            self._add_volumes_attachments(server["server"],
-                                          bdms,
-                                          add_delete_on_termination)
+            self._add_volumes_attachments(request, server["server"], bdms)
+
+        if api_version_request.is_supported(request, '2.9'):
+            server["server"]["locked"] = bool(instance["locked_by"])
 
         if api_version_request.is_supported(request, '2.16'):
             if show_host_status is None:
@@ -437,26 +429,27 @@ class ViewBuilder(common.ViewBuilder):
                             host_status == fields.HostStatus.UNKNOWN):
                         server["server"]['host_status'] = host_status
 
-        if api_version_request.is_supported(request, "2.9"):
-            server["server"]["locked"] = (True if instance["locked_by"]
-                                          else False)
-
-        if api_version_request.is_supported(request, "2.73"):
-            server["server"]["locked_reason"] = (instance.system_metadata.get(
-                                                 "locked_reason"))
-
-        if api_version_request.is_supported(request, "2.19"):
+        if api_version_request.is_supported(request, '2.19'):
             server["server"]["description"] = instance.get(
-                                                "display_description")
+                "display_description")
 
-        if api_version_request.is_supported(request, "2.26"):
+        if api_version_request.is_supported(request, '2.26'):
             server["server"]["tags"] = [t.tag for t in instance.tags]
 
-        if api_version_request.is_supported(request, "2.63"):
+        if api_version_request.is_supported(request, '2.63'):
             trusted_certs = None
             if instance.trusted_certs:
                 trusted_certs = instance.trusted_certs.ids
             server["server"]["trusted_image_certificates"] = trusted_certs
+
+        # This is shown from 2.71 or later _except_ for the server detail view
+        if show_server_groups:
+            server['server']['server_groups'] = self._get_server_groups(
+                context, instance)
+
+        if api_version_request.is_supported(request, '2.73'):
+            server["server"]["locked_reason"] = (
+                instance.system_metadata.get("locked_reason"))
 
         # TODO(stephenfin): Remove this check once we remove the
         # OS-EXT-SRV-ATTR:hostname policy checks from the policy is Y or later
@@ -464,13 +457,18 @@ class ViewBuilder(common.ViewBuilder):
             # API 2.90 made this field visible to non-admins, but we only show
             # it if it's not already added
             if not show_extended_attr:
-                server["server"]["OS-EXT-SRV-ATTR:hostname"] = \
-                    instance.hostname
+                server["server"]["OS-EXT-SRV-ATTR:hostname"] = (
+                    instance.hostname)
 
-        if show_server_groups:
-            server['server']['server_groups'] = self._get_server_groups(
-                                                                   context,
-                                                                   instance)
+        if show_AZ:
+            if api_version_request.is_supported(request, '2.96'):
+                pinned_az = self._get_pinned_az(context, instance, provided_az)
+                server['server']['pinned_availability_zone'] = pinned_az
+
+        if api_version_request.is_supported(request, '2.100'):
+            server['server']['scheduler_hints'] = self._get_scheduler_hints(
+                context, instance, provided_sched_hints)
+
         return server
 
     def index(self, request, instances, cell_down_support=False):
@@ -538,7 +536,7 @@ class ViewBuilder(common.ViewBuilder):
                         included in the response dict.
         :param show_host_status: If the host status should be included in
                         the response dict.
-        :param show_sec_grp: If the security group should be included in
+        :param show_sec_grp: If the security groups should be included in
                         the response dict.
         :param bdms: Instances bdms info from multiple cells.
         :param cell_down_support: True if the API (and caller) support
@@ -753,36 +751,38 @@ class ViewBuilder(common.ViewBuilder):
                     continue
                 server['host_status'] = host_status
 
-    def _add_security_grps(self, req, servers, instances,
-                           create_request=False):
+    def _add_security_grps(self, request, servers, instances):
         if not len(servers):
             return
 
-        # If request is a POST create server we get the security groups
-        # intended for an instance from the request. This is necessary because
-        # the requested security groups for the instance have not yet been sent
-        # to neutron.
-        # Starting from microversion 2.75, security groups is returned in
-        # PUT and POST Rebuild response also.
-        if not create_request:
-            context = req.environ['nova.context']
-            sg_instance_bindings = (
-                security_group_api.get_instances_security_groups_bindings(
-                    context, servers))
-            for server in servers:
-                groups = sg_instance_bindings.get(server['id'])
-                if groups:
-                    server['security_groups'] = groups
+        context = request.environ['nova.context']
+        sg_instance_bindings = (
+            security_group_api.get_instances_security_groups_bindings(
+                context, servers))
+        for server in servers:
+            groups = sg_instance_bindings.get(server['id'])
+            if groups:
+                server['security_groups'] = groups
 
-        # This section is for POST create server request. There can be
-        # only one security group for POST create server request.
-        else:
-            # try converting to json
-            req_obj = jsonutils.loads(req.body)
-            # Add security group to server, if no security group was in
-            # request add default since that is the group it is part of
-            servers[0]['security_groups'] = req_obj['server'].get(
-                'security_groups', [{'name': 'default'}])
+    def _add_volumes_attachments(self, request, server, bdms):
+        # server['id'] is guaranteed to be in the cache due to
+        # the core API adding it in the 'detail' or 'show' method.
+        # If that instance has since been deleted, it won't be in the
+        # 'bdms' dictionary though, so use 'get' to avoid KeyErrors.
+        instance_bdms = bdms.get(server['id'], [])
+        volumes_attached = []
+        for bdm in instance_bdms:
+            if bdm.get('volume_id'):
+                volume_attached = {'id': bdm['volume_id']}
+                if api_version_request.is_supported(request, '2.3'):
+                    volume_attached['delete_on_termination'] = (
+                        bdm['delete_on_termination'])
+                volumes_attached.append(volume_attached)
+        # NOTE(mriedem): The os-extended-volumes prefix should not be used for
+        # new attributes after v2.1. They are only in v2.1 for backward compat
+        # with v2.0.
+        key = "os-extended-volumes:volumes_attached"
+        server[key] = volumes_attached
 
     @staticmethod
     def _get_instance_bdms_in_multiple_cells(ctxt, instance_uuids):
@@ -812,27 +812,6 @@ class ViewBuilder(common.ViewBuilder):
             else:
                 bdms.update(result)
         return bdms
-
-    def _add_volumes_attachments(self, server, bdms,
-                                 add_delete_on_termination):
-        # server['id'] is guaranteed to be in the cache due to
-        # the core API adding it in the 'detail' or 'show' method.
-        # If that instance has since been deleted, it won't be in the
-        # 'bdms' dictionary though, so use 'get' to avoid KeyErrors.
-        instance_bdms = bdms.get(server['id'], [])
-        volumes_attached = []
-        for bdm in instance_bdms:
-            if bdm.get('volume_id'):
-                volume_attached = {'id': bdm['volume_id']}
-                if add_delete_on_termination:
-                    volume_attached['delete_on_termination'] = (
-                        bdm['delete_on_termination'])
-                volumes_attached.append(volume_attached)
-        # NOTE(mriedem): The os-extended-volumes prefix should not be used for
-        # new attributes after v2.1. They are only in v2.1 for backward compat
-        # with v2.0.
-        key = "os-extended-volumes:volumes_attached"
-        server[key] = volumes_attached
 
     @staticmethod
     def _get_server_groups(context, instance):
