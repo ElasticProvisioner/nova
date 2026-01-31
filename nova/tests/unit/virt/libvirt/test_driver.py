@@ -1763,6 +1763,39 @@ class LibvirtConnTestCase(test.NoDBTestCase,
 
         mock_which.assert_not_called()
 
+    @mock.patch.object(libvirt_driver.LibvirtDriver,
+                       '_register_all_undefined_instance_details',
+                       new=mock.Mock())
+    @mock.patch.object(host.Host, 'has_min_version', return_value=True)
+    def test_keep_tpm_supported(self, mock_version):
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+        drvr.init_host('dummyhost')
+        self.assertTrue(
+            drvr._may_keep_vtpm,
+            "LibvirtDriver did not correctly detect libvirt version "
+            "supporting KEEP_TPM"
+        )
+
+    @mock.patch.object(libvirt_driver.LibvirtDriver,
+                       '_register_all_undefined_instance_details',
+                       new=mock.Mock())
+    @mock.patch.object(host.Host, 'has_min_version')
+    def test_keep_tpm_unsupported(self, mock_version):
+        def version_check(lv_ver=None, **kwargs):
+            if lv_ver == libvirt_driver.MIN_VERSION_INT_FOR_KEEP_TPM:
+                return False
+            return True
+
+        mock_version.side_effect = version_check
+
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+        drvr.init_host('dummyhost')
+        self.assertFalse(
+            drvr._may_keep_vtpm,
+            "LibvirtDriver did not correctly detect libvirt version which "
+            "does not support KEEP_TPM"
+        )
+
     def test__check_multipath_misconfiguration(self):
         self.flags(volume_use_multipath=False, volume_enforce_multipath=True,
                    group='libvirt')
@@ -10925,10 +10958,10 @@ class LibvirtConnTestCase(test.NoDBTestCase,
                 mock_build_metadata.assert_called_with(self.context, instance)
                 mock_save.assert_called_with()
 
-    @mock.patch('threading.Event', new=mock.Mock())
     @mock.patch('nova.virt.libvirt.host.Host._get_domain')
     def test_detach_volume_with_vir_domain_affect_live_flag(self,
             mock_get_domain, use_alias=True):
+        self.flags(device_detach_timeout="1", group="libvirt")
         drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), False)
         instance = objects.Instance(**self.test_instance)
         volume_id = uuids.volume
@@ -19475,6 +19508,51 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         # ensure no raise for no such domain
         drvr._undefine_domain(instance)
 
+    @mock.patch.object(host.Host, "get_guest")
+    def test_undefine_domain_disarms_keep_vtpm_if_not_supported(
+            self, mock_get):
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), False)
+        drvr._may_keep_vtpm = False  # normally set by init_host
+        instance = objects.Instance(**self.test_instance)
+        fake_guest = mock.Mock()
+        mock_get.return_value = fake_guest
+
+        drvr._undefine_domain(instance, keep_vtpm=True)
+
+        fake_guest.delete_configuration.assert_called_once_with(
+            keep_vtpm=False,
+        )
+
+        # Check that it truly forces it to False and doesn't do a `not` or
+        # something weird :-).
+        fake_guest.reset_mock()
+        drvr._undefine_domain(instance, keep_vtpm=False)
+
+        fake_guest.delete_configuration.assert_called_once_with(
+            keep_vtpm=False,
+        )
+
+    @mock.patch.object(host.Host, "get_guest")
+    def test_undefine_domain_passes_keep_vtpm_if_supported(self, mock_get):
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), False)
+        drvr._may_keep_vtpm = True  # normally set by init_host
+        instance = objects.Instance(**self.test_instance)
+        fake_guest = mock.Mock()
+        mock_get.return_value = fake_guest
+
+        drvr._undefine_domain(instance, keep_vtpm=True)
+
+        fake_guest.delete_configuration.assert_called_once_with(keep_vtpm=True)
+
+        # Check that it does not force keep_vtpm to true, just because it is
+        # supported.
+        fake_guest.reset_mock()
+        drvr._undefine_domain(instance, keep_vtpm=False)
+
+        fake_guest.delete_configuration.assert_called_once_with(
+            keep_vtpm=False,
+        )
+
     @mock.patch.object(host.Host, "list_instance_domains")
     @mock.patch.object(objects.BlockDeviceMappingList, "bdms_by_instance_uuid")
     @mock.patch.object(objects.InstanceList, "get_by_filters")
@@ -22113,7 +22191,33 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         mock_delete_files.assert_called_once_with(fake_inst)
         # vTPM secret should not be deleted until instance is deleted.
         mock_delete_vtpm.assert_not_called()
-        mock_undefine.assert_called_once_with(fake_inst)
+        mock_undefine.assert_called_once_with(fake_inst, keep_vtpm=False)
+
+    @mock.patch('nova.virt.libvirt.driver.LibvirtDriver._undefine_domain')
+    @mock.patch('nova.crypto.delete_vtpm_secret')
+    @mock.patch('nova.virt.libvirt.driver.LibvirtDriver.delete_instance_files')
+    @mock.patch('nova.virt.driver.block_device_info_get_mapping')
+    @mock.patch('nova.virt.libvirt.driver.LibvirtDriver._unplug_vifs')
+    @mock.patch('nova.virt.libvirt.driver.LibvirtDriver._get_vpmems',
+                new=mock.Mock(return_value=None))
+    def test_cleanup_preserves_tpm_if_not_destroying_disks(
+        self, mock_unplug, mock_get_mapping, mock_delete_files,
+        mock_delete_vtpm, mock_undefine,
+    ):
+        """Test with default parameters."""
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI())
+        fake_inst = objects.Instance(**self.test_instance)
+        mock_get_mapping.return_value = []
+        mock_delete_files.return_value = True
+
+        with mock.patch.object(fake_inst, 'save'):
+            drvr.cleanup('ctxt', fake_inst, 'netinfo', destroy_disks=False)
+
+        mock_unplug.assert_called_once_with(fake_inst, 'netinfo', True)
+        mock_get_mapping.assert_called_once_with(None)
+        mock_delete_files.assert_not_called()
+        mock_delete_vtpm.assert_not_called()
+        mock_undefine.assert_called_once_with(fake_inst, keep_vtpm=True)
 
     @mock.patch('nova.virt.libvirt.driver.LibvirtDriver._undefine_domain')
     @mock.patch('nova.crypto.delete_vtpm_secret')
@@ -22138,7 +22242,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
             drvr.cleanup('ctxt', fake_inst, 'netinfo')
         # vTPM secret should not be deleted until instance is deleted.
         mock_delete_vtpm.assert_not_called()
-        mock_undefine.assert_called_once_with(fake_inst)
+        mock_undefine.assert_called_once_with(fake_inst, keep_vtpm=False)
 
     @mock.patch.object(libvirt_driver.LibvirtDriver, 'delete_instance_files',
                        return_value=True)
@@ -26314,7 +26418,6 @@ class LibvirtDriverTestCase(test.NoDBTestCase, TraitsComparisonMixin):
         self._test_attach_interface(
             power_state.SHUTDOWN, fakelibvirt.VIR_DOMAIN_AFFECT_CONFIG)
 
-    @mock.patch('threading.Event.wait', new=mock.Mock())
     def _test_detach_interface(self, state, device_not_found=False):
         # setup some mocks
         instance = self._create_instance()
@@ -26433,6 +26536,7 @@ class LibvirtDriverTestCase(test.NoDBTestCase, TraitsComparisonMixin):
         mock_unplug.assert_called_once_with(instance, network_info[0])
 
     def test_detach_interface_with_running_instance(self):
+        self.flags(device_detach_timeout="1", group="libvirt")
         self._test_detach_interface(power_state.RUNNING)
 
     def test_detach_interface_with_running_instance_device_not_found(self):
@@ -26441,6 +26545,7 @@ class LibvirtDriverTestCase(test.NoDBTestCase, TraitsComparisonMixin):
         self._test_detach_interface(power_state.RUNNING, device_not_found=True)
 
     def test_detach_interface_with_pause_instance(self):
+        self.flags(device_detach_timeout="1", group="libvirt")
         self._test_detach_interface(power_state.PAUSED)
 
     def test_detach_interface_with_shutdown_instance(self):
@@ -26469,12 +26574,12 @@ class LibvirtDriverTestCase(test.NoDBTestCase, TraitsComparisonMixin):
         self.assertIn('the device is no longer found on the guest',
                       str(mock_log.warning.call_args[0]))
 
-    @mock.patch('threading.Event.wait', new=mock.Mock())
     @mock.patch.object(FakeVirtDomain, 'info')
     @mock.patch.object(FakeVirtDomain, 'detachDeviceFlags')
     @mock.patch.object(host.Host, '_get_domain')
     def test_detach_interface_device_with_same_mac_address(
             self, mock_get_domain, mock_detach, mock_info):
+        self.flags(device_detach_timeout="1", group="libvirt")
         instance = self._create_instance()
         network_info = _fake_network_info(self)
         domain = FakeVirtDomain(fake_xml="""
@@ -26904,7 +27009,8 @@ class LibvirtDriverTestCase(test.NoDBTestCase, TraitsComparisonMixin):
         # check that the internal event handling is cleaned up
         self.assertEqual(set(), drvr._device_event_handler._waiters)
 
-    @mock.patch('threading.Event.wait')
+    @mock.patch(
+        'nova.virt.libvirt.driver.AsyncDeviceEventsHandler.Waiter.wait')
     @ddt.data(power_state.RUNNING, power_state.PAUSED)
     def test__detach_with_retry_timeout_retry_succeeds(
         self, state, mock_event_wait
@@ -26933,12 +27039,12 @@ class LibvirtDriverTestCase(test.NoDBTestCase, TraitsComparisonMixin):
                 None,
             ]
         )
-        # By mocking threading.Event.wait we prevent the test to wait until the
-        # timeout happens, and by returning False first we simulate to the
-        # caller that the wait returned not because the event is set but
-        # because timeout happened. Then during the retry we return True
-        # signalling that the event is set, i.e. the libvirt event the caller
-        # is waiting for has been received
+        # By mocking AsyncDeviceEventsHandler.Waiter.wait we prevent the test
+        # to wait until the timeout happens, and by returning False first we
+        # simulate to the caller that the wait returned not because the event
+        # is set but because timeout happened. Then during the retry we return
+        # True signalling that the event is set, i.e. the libvirt event the
+        # caller is waiting for has been received
         mock_event_wait.side_effect = [False, True]
 
         drvr._detach_with_retry(
@@ -26960,7 +27066,8 @@ class LibvirtDriverTestCase(test.NoDBTestCase, TraitsComparisonMixin):
         # check that the internal event handling is cleaned up
         self.assertEqual(set(), drvr._device_event_handler._waiters)
 
-    @mock.patch('threading.Event.wait')
+    @mock.patch(
+        'nova.virt.libvirt.driver.AsyncDeviceEventsHandler.Waiter.wait')
     def test__detach_with_retry_timeout_retry_unplug_in_progress(
         self, mock_event_wait
     ):
@@ -26990,12 +27097,12 @@ class LibvirtDriverTestCase(test.NoDBTestCase, TraitsComparisonMixin):
                 None,
             ]
         )
-        # By mocking threading.Event.wait we prevent the test to wait until the
-        # timeout happens, and by returning False first we simulate to the
-        # caller that the wait returned not because the event is set but
-        # because timeout happened. Then during the retry we return True
-        # signalling that the event is set, i.e. the libvirt event the caller
-        # is waiting for has been received
+        # By mocking AsyncDeviceEventsHandler.Waiter.wait we prevent the test
+        # to wait until the timeout happens, and by returning False first we
+        # simulate to the caller that the wait returned not because the event
+        # is set but because timeout happened. Then during the retry we return
+        # True signalling that the event is set, i.e. the libvirt event the
+        # caller is waiting for has been received
         mock_event_wait.side_effect = [False, True]
 
         # there will be two detach attempts
@@ -27039,7 +27146,8 @@ class LibvirtDriverTestCase(test.NoDBTestCase, TraitsComparisonMixin):
         # check that the internal event handling is cleaned up
         self.assertEqual(set(), drvr._device_event_handler._waiters)
 
-    @mock.patch('threading.Event.wait')
+    @mock.patch(
+        'nova.virt.libvirt.driver.AsyncDeviceEventsHandler.Waiter.wait')
     @ddt.data(power_state.RUNNING, power_state.PAUSED)
     def test__detach_with_retry_timeout_run_out_of_retries(
         self, state, mock_event_wait
@@ -27061,9 +27169,9 @@ class LibvirtDriverTestCase(test.NoDBTestCase, TraitsComparisonMixin):
 
         mock_get_device_conf_func = mock.Mock(return_value=mock_dev)
 
-        # By mocking threading.Event.wait we prevent the test to wait until the
-        # timeout happens, and by returning False we simulate to the
-        # caller that the wait returned not because the event is set but
+        # By mocking AsyncDeviceEventsHandler.Waiter.wait we prevent the test
+        # to wait until the timeout happens, and by returning False we simulate
+        # to the caller that the wait returned not because the event is set but
         # because timeout happened.
         mock_event_wait.return_value = False
 
