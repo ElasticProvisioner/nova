@@ -23,11 +23,14 @@ import hashlib
 import inspect
 import multiprocessing
 import os
+import queue
 import random
 import re
 import shutil
 import tempfile
+import threading
 import time
+import typing as ty
 
 from eventlet import tpool
 import futurist
@@ -75,11 +78,16 @@ SM_SKIP_KEYS = (
     'img_mappings', 'img_block_device_mapping',
 )
 
-_FILE_CACHE = {}
+_FILE_CACHE: dict[str, dict] = {}
 
 _SERVICE_TYPES = service_types.ServiceTypes()
 
-DEFAULT_EXECUTOR = None
+# NOTE(gibi): futurist does not expose the common based class.
+# NOTE(gibi): we can simplify this when eventlet is removed.
+Executor: ty.TypeAlias = (
+    futurist.GreenThreadPoolExecutor | futurist.ThreadPoolExecutor)
+
+DEFAULT_EXECUTOR: Executor | None = None
 
 
 def cooperative_yield():
@@ -105,7 +113,7 @@ def destroy_default_executor():
     DEFAULT_EXECUTOR = None
 
 
-def create_executor(max_workers):
+def create_executor(max_workers) -> Executor:
     if concurrency_mode_threading():
         executor = futurist.ThreadPoolExecutor(max_workers)
     else:
@@ -113,7 +121,7 @@ def create_executor(max_workers):
     return executor
 
 
-def _get_default_executor():
+def _get_default_executor() -> Executor:
     global DEFAULT_EXECUTOR
 
     if not DEFAULT_EXECUTOR:
@@ -563,7 +571,9 @@ def _serialize_profile_info():
     return trace_info
 
 
-def spawn(func, *args, **kwargs) -> futurist.Future:
+def spawn(
+    func: ty.Callable[..., ty.Any], *args: ty.Any, **kwargs: ty.Any
+) -> futurist.Future:
     """Passthrough method for eventlet.spawn.
 
     This utility exists so that it can be stubbed for testing without
@@ -577,7 +587,21 @@ def spawn(func, *args, **kwargs) -> futurist.Future:
     return spawn_on(_get_default_executor(), func, *args, **kwargs)
 
 
-def _executor_is_full(executor):
+def spawn_after(
+    seconds: float,
+    func: ty.Callable[..., ty.Any],
+    *args: ty.Any, **kwargs: ty.Any
+) -> futurist.Future:
+    """Executing the function asynchronously after the given time."""
+
+    def delayed(*args, **kwargs):
+        time.sleep(seconds)
+        return func(*args, **kwargs)
+
+    return spawn(delayed, *args, **kwargs)
+
+
+def _executor_is_full(executor: Executor) -> bool:
     if concurrency_mode_threading():
         # TODO(gibi): Move this whole logic to futurist ThreadPoolExecutor
         # so that we can avoid accessing the internals of the executor
@@ -589,7 +613,11 @@ def _executor_is_full(executor):
     return False
 
 
-def spawn_on(executor, func, *args, **kwargs) -> futurist.Future:
+def spawn_on(
+    executor: Executor,
+    func: ty.Callable[..., ty.Any],
+    *args: ty.Any, **kwargs: ty.Any,
+) -> futurist.Future:
     """Passthrough method to run func on a thread in a given executor.
 
     It will also grab the context from the threadlocal store and add it to
@@ -1079,6 +1107,7 @@ def run_once(message, logger, cleanup=None):
     logger and cleanup function will be propagated to the caller.
     """
     def outer_wrapper(func):
+        @ty.no_type_check
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             if not wrapper.called:
@@ -1128,6 +1157,7 @@ def latch_error_on_raise(retryable=(_SentinelException,)):
     """
 
     def outer_wrapper(func):
+        @ty.no_type_check
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             if wrapper.error:
@@ -1262,10 +1292,10 @@ def concurrency_mode_threading():
     return not monkey_patch.is_patched()
 
 
-SCATTER_GATHER_EXECUTOR = None
+SCATTER_GATHER_EXECUTOR: Executor | None = None
 
 
-def get_scatter_gather_executor():
+def get_scatter_gather_executor() -> Executor:
     """Returns the executor used for scatter/gather operations."""
     global SCATTER_GATHER_EXECUTOR
 
@@ -1303,10 +1333,10 @@ def destroy_scatter_gather_executor():
     SCATTER_GATHER_EXECUTOR = None
 
 
-CACHE_IMAGES_EXECUTOR = None
+CACHE_IMAGES_EXECUTOR: Executor | None = None
 
 
-def get_cache_images_executor():
+def get_cache_images_executor() -> Executor:
     """Returns the executor used for cache images operations."""
     global CACHE_IMAGES_EXECUTOR
 
@@ -1340,7 +1370,7 @@ def destroy_cache_images_executor():
     CACHE_IMAGES_EXECUTOR = None
 
 
-def _log_executor_stats(executor):
+def _log_executor_stats(executor: Executor) -> None:
     if CONF.thread_pool_statistic_period < 0:
         return
 
@@ -1381,3 +1411,219 @@ def tpool_wrap(target, autowrap=()):
         return target
     else:
         return tpool.Proxy(target, autowrap=autowrap)
+
+
+class StaticallyDelayingCancellableTaskExecutorWrapper:
+    """Executor wrapper that submit work to another executor but delays each
+    task's submission with a statically defined delay and supports cancelling
+    the task during such delay.
+
+    Note that tasks that are actually started running in the real executor
+    might not be cancellable anymore depending on that executor and the
+    concurrency mode used. See
+    https://docs.python.org/3.12/library/concurrent.futures.html#concurrent.futures.Future.cancel
+
+    Note that shutting down the wrapper only shuts down its own scheduler
+    thread but does not shut down the real executor that is passed in __init__.
+
+    Note that this class does not support a different delay length for
+    different tasks.
+    """
+
+    class Task:
+        def __init__(
+            self,
+            delay: float,
+            fn: ty.Callable[..., ty.Any],
+            args: tuple,
+            kwargs: dict
+        ):
+            self.deadline = time.monotonic() + delay
+            self.future = futurist.Future()
+            self.fn = fn
+            self.args = args
+            self.kwargs = kwargs
+
+        @property
+        def remaining_delay(self):
+            return self.deadline - time.monotonic()
+
+        def __str__(self):
+            return (
+                f"Task(fn={self.fn}, "
+                f"remaining_delay={self.remaining_delay} "
+                f"future={self.future})")
+
+    def __init__(self, delay: float, executor: Executor):
+        """Initialize the wrapper
+
+        :param delay: delay length in seconds
+        :param executor: executor object to run each task. It supports both
+            native threading and eventlet based executors.
+        """
+
+        self._queue: queue.Queue = queue.Queue()
+        self._executor = executor
+        self._delay = delay
+        self._shutdown = threading.Condition()
+        self._shutdown_requested = False
+        self._sentinel = self.Task(0, lambda: None, (), {})
+        # We are intentionally not running our _run() in the executor
+        # as we cannot assume that the executor has more than one worker
+        # and our logic never finishes so it would consume one worker
+        # constantly.
+        self._thread = threading.Thread(target=self._run)
+        self._thread.daemon = True
+        self._thread.start()
+
+    @staticmethod
+    def _log(msg, *args):
+        LOG.debug(msg, *args)
+
+    @staticmethod
+    def _task_wrapper(task) -> None:
+        """This wraps the original task so when it finishes in the real
+        executor the result of the task can be copied to the Future object
+        already returned to our caller from submit_with_delay(). So
+        the caller can get the result or exception from the task.
+        """
+        try:
+            task.future.set_result(task.fn(*task.args, **task.kwargs))
+        except BaseException as e:
+            task.future.set_exception(e)
+
+    def _wait_for_deadline_then_set_running(self, task) -> bool:
+        """Waiting for the task's deadline then mark it running
+
+        Wait can be interrupted by shutdown of the wrapper in such a case
+        the task's state is checked. If the task is cancelled then return
+        immediately with False. If the task is not cancelled then wait for
+        its deadline and eventually return True if the task is still not
+        cancelled.
+
+        If True is returned the future in the task is also atomically set to
+        running state and the future cannot be cancelled anymore.
+        """
+        if task.remaining_delay <= 0:
+            return task.future.set_running_or_notify_cancel()
+
+        self._log("Waitig for the deadline of %s", task)
+        with self._shutdown:
+            shutdown = self._shutdown.wait_for(
+                lambda: self._shutdown_requested, task.remaining_delay)
+
+        if shutdown:
+            self._log(
+                "Shutdown is requested while waiting "
+                "for the deadline of %s", task)
+
+            if task.future.cancelled():
+                return False
+
+            self._log(
+                "%s is not cancelled so still waiting for its "
+                "deadline", task)
+            if task.remaining_delay > 0:
+                # Blocking here is fine as we have the assumption that
+                # no new task can arrive that has a deadline that is sooner
+                # than the deadline of the oldest task in the queue due to
+                # our static delay (and we assume that time travel is not
+                # allowed).
+                time.sleep(task.remaining_delay)
+
+        return task.future.set_running_or_notify_cancel()
+
+    def _run(self):
+        while True:
+            self._log("Waiting for the next task")
+            task: StaticallyDelayingCancellableTaskExecutorWrapper.Task = (
+                self._queue.get())
+            self._log("Received %s", task)
+
+            if task is self._sentinel:
+                # We are asked to terminate so exit the loop.
+                self._queue.task_done()
+                self._log("Sentinel received, thread is exiting")
+                return
+
+            if task.future.cancelled():
+                # The task was cancelled while it was in the queue.
+                # We don't need to run it. Just move on to the next task
+                self._log("%s was cancelled while queued, skipping", task)
+                self._queue.task_done()
+                continue
+
+            # The task is still valid, wait for its deadline
+            run_it = self._wait_for_deadline_then_set_running(task)
+            if not run_it:
+                # The task was cancelled during the delay period.
+                # We don't need to run it. Just move on to the next task.
+                self._log(
+                    "%s was cancelled during its delay period, skipping", task)
+                self._queue.task_done()
+                continue
+
+            # Push the task to the real executor. We don't need to wait
+            # for the result here as the client can do that
+            # via the task.future we already returned from submit_with_delay()
+            try:
+                self._executor.submit(self._task_wrapper, task)
+            except BaseException as e:
+                # If for any reason we cannot submit a task then we should not
+                # let the exception escape as that will prevent our thread
+                # to terminate cleanly. Instead, we log and propagate back.
+                LOG.exception(
+                    "Failed to submit %s to executor %s", task, self._executor)
+                task.future.set_exception(e)
+                self._queue.task_done()
+                continue
+
+            self._log("%s submitted to %s", task, self._executor)
+            # The task is not done from the executor perspective, but it is
+            # done from the _run() logic perspective. Signal it, so shutdown()
+            # can use Queue.join()
+            self._queue.task_done()
+
+    def submit_with_delay(
+        self, fn: ty.Callable[..., ty.Any], *args: ty.Any, **kwargs: ty.Any
+    ) -> futurist.Future:
+        """Submit work with delay."""
+        # We need this wide locking as we don't want to queue a task behind
+        # the sentinel as that task will never be processed.
+        with self._shutdown:
+            if self._shutdown_requested:
+                raise RuntimeError(
+                    "Cannot schedule new tasks after being shutdown")
+
+            task = self.Task(self._delay, fn, args, kwargs)
+            self._queue.put(task)
+            self._log("Queued %s", task)
+            return task.future
+
+    def shutdown(self, wait: bool = True):
+        """Shutdown the executor"""
+        with self._shutdown:
+            if not self._shutdown_requested:
+                # Ensure that our thread wakes at least one more time to allow
+                # it to exit by queuing up a sentinel task after the shutdown
+                # condition is set. This task won't be executed.
+                self._queue.put(self._sentinel)
+                self._log("Sentinel is queued")
+                self._shutdown_requested = True
+                self._shutdown.notify_all()
+                self._log("Shutdown is set")
+
+        # If wait is set we need to wait for our sentinel to be processed and
+        # therefore our thread to exit.
+        # NOTE(gibi): We are intentionally not shutting down the real executor
+        # as we are not the one created it or owning it so it might be shared
+        # between different callers.
+        if wait:
+            self._queue.join()
+            self._log("Queue joined")
+            self._thread.join()
+            self._log("Scheduler thread joined")
+
+    @property
+    def is_alive(self) -> bool:
+        return self._thread.is_alive()

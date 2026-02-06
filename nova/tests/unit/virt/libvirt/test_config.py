@@ -1159,6 +1159,31 @@ class LibvirtConfigGuestDiskTest(LibvirtConfigBaseTest):
               <target bus="scsi" dev="/dev/sda"/>
             </disk>""")
 
+    def test_config_block_lun_no_blockio(self):
+        """Test that blockio is not generated for LUN devices (bug 2127196).
+
+        QEMU's scsi-block device driver does not support physical_block_size
+        and logical_block_size properties, so blockio must not be included
+        in the XML when source_device is 'lun'.
+        """
+        obj = config.LibvirtConfigGuestDisk()
+        obj.source_type = "block"
+        obj.source_path = "/tmp/hello"
+        obj.source_device = "lun"
+        obj.driver_name = "qemu"
+        obj.target_dev = "/dev/sda"
+        obj.target_bus = "scsi"
+        obj.logical_block_size = "512"
+        obj.physical_block_size = "512"
+
+        xml = obj.to_xml()
+        self.assertXmlEqual(xml, """
+            <disk type="block" device="lun">
+              <driver name="qemu"/>
+              <source dev="/tmp/hello"/>
+              <target bus="scsi" dev="/dev/sda"/>
+            </disk>""")
+
     def test_config_block_parse(self):
         xml = """<disk type="block" device="cdrom">
                    <driver name="qemu"/>
@@ -4024,9 +4049,13 @@ class LibvirtConfigGuestCPUTuneTest(LibvirtConfigBaseTest):
         vcpu3.cpuset = set([6, 7])
         cputune.vcpupin.extend([vcpu0, vcpu1, vcpu2, vcpu3])
 
-        emu = config.LibvirtConfigGuestCPUTuneIOThreadPin()
+        emu = config.LibvirtConfigGuestCPUTuneEmulatorPin()
         emu.cpuset = set([0, 1, 2, 3, 4, 5, 6, 7])
         cputune.emulatorpin = emu
+
+        iot = config.LibvirtConfigGuestCPUTuneIOThreadPin()
+        iot.cpuset = set([0, 1, 2, 3, 4, 5, 6, 7])
+        cputune.iothreadpin = iot
 
         sch0 = config.LibvirtConfigGuestCPUTuneVCPUSched()
         sch0.vcpus = set([0, 1, 2, 3])
@@ -4041,6 +4070,7 @@ class LibvirtConfigGuestCPUTuneTest(LibvirtConfigBaseTest):
         xml = cputune.to_xml()
         self.assertXmlEqual("""
           <cputune>
+            <emulatorpin cpuset="0-7"/>
             <iothreadpin cpuset="0-7"/>
             <vcpupin vcpu="0" cpuset="0-1"/>
             <vcpupin vcpu="1" cpuset="2-3"/>
