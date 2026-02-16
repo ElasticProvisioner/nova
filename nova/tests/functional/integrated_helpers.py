@@ -642,11 +642,12 @@ class InstanceHelperMixin:
 
     def _live_migrate(
         self, server, migration_expected_state='completed',
-        server_expected_state='ACTIVE',
+        server_expected_state='ACTIVE', api=None, host=None,
     ):
-        self.api.post_server_action(
+        api = api or self.api
+        api.post_server_action(
             server['id'],
-            {'os-migrateLive': {'host': None, 'block_migration': 'auto'}})
+            {'os-migrateLive': {'host': host, 'block_migration': 'auto'}})
         self._wait_for_migration_status(server, [migration_expected_state])
         return self._wait_for_state_change(server, server_expected_state)
 
