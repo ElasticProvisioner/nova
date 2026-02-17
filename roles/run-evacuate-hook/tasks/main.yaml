@@ -48,23 +48,30 @@
     state: destroyed
   with_items: "{{ subnode_vms.list_vms }}"
 
-- name: Stop libvirtd on "{{ inventory_hostname }}"
-  become: true
-  systemd:
-    name: "{{ item }}"
-    state: stopped
-    enabled: no
-  with_items:
-    - libvirtd.service
-    - libvirtd.socket
-    - libvirtd-admin.socket
-    - libvirtd-ro.socket
-    - virtlogd.service
-    - virtlogd-admin.socket
-    - virtlogd.socket
-    - virtlockd.service
-    - virtlockd-admin.socket
-    - virtlockd.socket
+- name: Stop libvirt services on "{{ inventory_hostname }}"
+  include_tasks: manage_libvirt_service.yaml
+  vars:
+    service_name: "{{ item.name }}"
+    service_state: stopped
+    service_enabled: "no"
+    service_units: "{{ item.units }}"
+  loop:
+    - name: libvirtd
+      units:
+        - libvirtd.service
+        - libvirtd.socket
+        - libvirtd-admin.socket
+        - libvirtd-ro.socket
+    - name: virtlogd
+      units:
+        - virtlogd.service
+        - virtlogd-admin.socket
+        - virtlogd.socket
+    - name: virtlockd
+      units:
+        - virtlockd.service
+        - virtlockd-admin.socket
+        - virtlockd.socket
 
 - name: Run negative evacuate tests
   become: true
@@ -73,23 +80,30 @@
   environment:
     CONTROLLER_HOSTNAME: "{{ hostvars['controller']['ansible_hostname'] }}"
 
-- name: Start libvirtd on "{{ inventory_hostname }}"
-  become: true
-  systemd:
-    name: "{{ item }}"
-    state: started
-    enabled: yes
-  with_items:
-    - libvirtd.service
-    - libvirtd.socket
-    - libvirtd-admin.socket
-    - libvirtd-ro.socket
-    - virtlogd.service
-    - virtlogd-admin.socket
-    - virtlogd.socket
-    - virtlockd.service
-    - virtlockd-admin.socket
-    - virtlockd.socket
+- name: Start libvirt services on "{{ inventory_hostname }}"
+  include_tasks: manage_libvirt_service.yaml
+  vars:
+    service_name: "{{ item.name }}"
+    service_state: started
+    service_enabled: "yes"
+    service_units: "{{ item.units }}"
+  loop:
+    - name: libvirtd
+      units:
+        - libvirtd.service
+        - libvirtd.socket
+        - libvirtd-admin.socket
+        - libvirtd-ro.socket
+    - name: virtlogd
+      units:
+        - virtlogd.service
+        - virtlogd-admin.socket
+        - virtlogd.socket
+    - name: virtlockd
+      units:
+        - virtlockd.service
+        - virtlockd-admin.socket
+        - virtlockd.socket
 
 - name: Run evacuate tests
   become: true

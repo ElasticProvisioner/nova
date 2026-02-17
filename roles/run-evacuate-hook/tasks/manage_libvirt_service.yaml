@@ -1,0 +1,22 @@
+# Manage a libvirt service (stop/start) only if it is installed.
+# Parameters:
+#   service_name: base name of the service (e.g. "libvirtd", "virtlogd", "virtlockd")
+#   service_state: "stopped" or "started"
+#   service_enabled: "yes" or "no"
+#   service_units: list of unit names to manage
+
+- name: "Check if {{ service_name }} is installed"
+  become: true
+  command: systemctl list-unit-files {{ service_name }}.service
+  register: _service_check
+  ignore_errors: true
+  changed_when: false
+
+- name: "Manage {{ service_name }} units"
+  become: true
+  systemd:
+    name: "{{ item }}"
+    state: "{{ service_state }}"
+    enabled: "{{ service_enabled }}"
+  with_items: "{{ service_units }}"
+  when: _service_check is succeeded
