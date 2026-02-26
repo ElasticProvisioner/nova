@@ -233,7 +233,7 @@ class ServiceTestCase(test.NoDBTestCase):
 
     @mock.patch('nova.servicegroup.API')
     @mock.patch('nova.objects.service.Service.get_by_host_and_binary')
-    def test_parent_graceful_shutdown_with_cleanup_host(
+    def test_service_stop_call_manager_graceful_shutdown(
             self, mock_svc_get_by_host_and_binary, mock_API):
         mock_manager = mock.Mock(target=None)
 
@@ -250,7 +250,8 @@ class ServiceTestCase(test.NoDBTestCase):
             mock_svc_get_by_host_and_binary.return_value)
 
         serv.stop()
-        serv.manager.cleanup_host.assert_called_with()
+        # Check service with one RPC server calls manager graceful_shutdown
+        serv.manager.graceful_shutdown.assert_called_once_with()
 
     @mock.patch('nova.servicegroup.API')
     @mock.patch('nova.objects.service.Service.get_by_host_and_binary')
@@ -313,6 +314,142 @@ class ServiceTestCase(test.NoDBTestCase):
         self.assertIsNotNone(serv.rpcserver)
         self.assertIsNotNone(serv.rpcserver_alt)
         self.assertNotEqual(serv.rpcserver, serv.rpcserver_alt)
+
+    @mock.patch('nova.servicegroup.API')
+    @mock.patch('nova.objects.service.Service.get_by_host_and_binary')
+    @mock.patch.object(rpc, 'get_server')
+    def test_service_stop_with_two_rpcservers(
+            self, mock_rpc, mock_svc_get_by_host_and_binary, mock_API):
+        serv = service.Service(self.host,
+                               self.binary,
+                               self.topic,
+                               'nova.tests.unit.test_service.FakeManager',
+                               topic_alt='fake_alt')
+        serv.start()
+        rpcserver = serv.rpcserver
+        rpcserver_alt = serv.rpcserver_alt
+        self.assertIsNotNone(rpcserver_alt)
+        with mock.patch.object(serv.manager, 'graceful_shutdown') as mock_gs:
+            serv.stop()
+            # Both rpcservers stop and wait is called.
+            rpcserver.stop.assert_called_with()
+            rpcserver.wait.assert_called_with()
+            rpcserver_alt.stop.assert_called_with()
+            rpcserver_alt.wait.assert_called_with()
+            # Check service with two RPC server calls manager graceful_shutdown
+            mock_gs.assert_called_once_with()
+
+    @mock.patch('nova.servicegroup.API')
+    @mock.patch('nova.objects.service.Service.get_by_host_and_binary')
+    @mock.patch.object(rpc, 'get_server')
+    def test_service_stop_handle_manager_gs_exception(
+            self, mock_rpc, mock_svc_get_by_host_and_binary, mock_API):
+        serv = service.Service(self.host,
+                               self.binary,
+                               self.topic,
+                               'nova.tests.unit.test_service.FakeManager')
+        serv.start()
+        serv.manager.graceful_shutdown = mock.Mock(side_effect=Exception())
+        # service.stop() should proceed even manager graceful_shutdown raise
+        # error
+        serv.stop()
+        serv.manager.graceful_shutdown.assert_called_once_with()
+
+    @mock.patch('nova.servicegroup.API')
+    @mock.patch('nova.objects.service.Service.get_by_host_and_binary')
+    @mock.patch.object(rpc, 'get_server')
+    def test_stop_with_two_rpcservers_handle_manager_gs_exception(
+            self, mock_rpc, mock_svc_get_by_host_and_binary, mock_API):
+        serv = service.Service(self.host,
+                               self.binary,
+                               self.topic,
+                               'nova.tests.unit.test_service.FakeManager',
+                               topic_alt='fake-alt')
+        serv.start()
+        rpcserver = serv.rpcserver
+        rpcserver_alt = serv.rpcserver_alt
+        serv.manager.graceful_shutdown = mock.Mock(side_effect=Exception())
+        serv.stop()
+        # Even manager graceful_shutdown() raise error, both rpcservers stop
+        # and wait is called.
+        rpcserver.stop.assert_called_with()
+        rpcserver.wait.assert_called_with()
+        rpcserver_alt.stop.assert_called_with()
+        rpcserver_alt.wait.assert_called_with()
+        serv.manager.graceful_shutdown.assert_called_once_with()
+
+    def test_shutdown_rpc_server(self):
+        serv = service.Service(self.host,
+                               self.binary,
+                               self.topic,
+                               'nova.tests.unit.test_service.FakeManager')
+        mock_rpc_server = mock.Mock()
+        serv._shutdown_rpc_server(mock_rpc_server, self.topic)
+        mock_rpc_server.stop.assert_called_once_with()
+        mock_rpc_server.wait.assert_called_once_with()
+
+    def test_shutdown_rpc_server_handle_exception(self):
+        serv = service.Service(self.host,
+                               self.binary,
+                               self.topic,
+                               'nova.tests.unit.test_service.FakeManager')
+        mock_rpc_server = mock.Mock()
+        mock_rpc_server.stop.side_effect = Exception()
+        serv._shutdown_rpc_server(mock_rpc_server, self.topic)
+        mock_rpc_server.stop.assert_called_once_with()
+        mock_rpc_server.wait.assert_not_called()
+
+    @mock.patch('nova.servicegroup.API')
+    @mock.patch('nova.objects.service.Service.get_by_host_and_binary')
+    @mock.patch.object(rpc, 'get_server')
+    def test_service_stop_handle_first_rpcserver_exception(
+            self, mock_rpc, mock_svc_get_by_host_and_binary, mock_API):
+        serv = service.Service(self.host,
+                               self.binary,
+                               self.topic,
+                               'nova.tests.unit.test_service.FakeManager',
+                               topic_alt='fake_alt')
+        serv.start()
+        serv.rpcserver = mock.Mock()
+        rpcserver = serv.rpcserver
+        serv.rpcserver.stop.side_effect = Exception()
+        rpcserver_alt = serv.rpcserver_alt
+        self.assertIsNotNone(rpcserver_alt)
+        with mock.patch.object(serv.manager, 'graceful_shutdown') as mock_gs:
+            serv.stop()
+            rpcserver.stop.assert_called_once_with()
+            rpcserver.wait.assert_not_called()
+            # Check if first RPC server stop() raise exception, it still call
+            # manager graceful_shutdown() and 2nd RPC server stop/wait.
+            mock_gs.assert_called_once_with()
+            rpcserver_alt.stop.assert_called_once_with()
+            rpcserver_alt.wait.assert_called_once_with()
+
+    @mock.patch('nova.servicegroup.API')
+    @mock.patch('nova.objects.service.Service.get_by_host_and_binary')
+    @mock.patch.object(rpc, 'get_server')
+    def test_service_stop_handle_2nd_rpcserver_exception(
+            self, mock_rpc, mock_svc_get_by_host_and_binary, mock_API):
+        serv = service.Service(self.host,
+                               self.binary,
+                               self.topic,
+                               'nova.tests.unit.test_service.FakeManager',
+                               topic_alt='fake_alt')
+        serv.start()
+        rpcserver = serv.rpcserver
+        serv.rpcserver_alt = mock.Mock()
+        serv.rpcserver_alt.stop.side_effect = Exception()
+        rpcserver_alt = serv.rpcserver_alt
+        self.assertIsNotNone(rpcserver_alt)
+        with mock.patch.object(serv.manager, 'graceful_shutdown') as mock_gs:
+            serv.stop()
+            rpcserver.stop.assert_called_once_with()
+            rpcserver.wait.assert_called_once_with()
+            mock_gs.assert_called_once_with()
+            # service.stop() should proceed even 2nd RPC server stop() raise
+            # error.
+            rpcserver_alt.stop.assert_called_once_with()
+            rpcserver_alt.wait.assert_not_called()
 
     def test_reset(self):
         serv = service.Service(self.host,

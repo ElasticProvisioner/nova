@@ -1,0 +1,11 @@
+---
+features:
+  - |
+    The Ironic driver now supports VNC consoles when available. The
+    pre-requesites for this being available for a node is:
+
+    - Ironic is configured to enable graphical consoles
+    - The node ``console_interface`` is a graphical driver such as
+      ``redfish-graphical`` or ``fake-graphical``
+    - ``nova-novncproxy`` can make network connections to the VNC servers
+      which run adjacent to ``ironic-conductor``

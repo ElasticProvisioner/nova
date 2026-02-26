@@ -30,8 +30,6 @@ the other libvirt related classes
 from collections.abc import Callable
 from collections.abc import Mapping
 from collections import defaultdict
-import fnmatch
-import glob
 import inspect
 import operator
 import os
@@ -41,7 +39,6 @@ import typing as ty
 
 from lxml import etree
 from oslo_log import log as logging
-from oslo_serialization import jsonutils
 from oslo_utils import excutils
 from oslo_utils import strutils
 from oslo_utils import units
@@ -81,37 +78,7 @@ HV_DRIVER_QEMU = "QEMU"
 
 SEV_KERNEL_PARAM_FILE = '/sys/module/kvm_amd/parameters/%s'
 
-# These are taken from the spec
-# https://github.com/qemu/qemu/blob/v5.2.0/docs/interop/firmware.json
-QEMU_FIRMWARE_DESCRIPTOR_PATHS = [
-    '/usr/share/qemu/firmware',
-    '/etc/qemu/firmware',
-    # we intentionally ignore '$XDG_CONFIG_HOME/qemu/firmware'
-]
-
 MIN_QEMU_SEV_ES_VERSION = (8, 0, 0)
-
-
-def _get_loaders():
-    if not any(
-        os.path.exists(path) for path in QEMU_FIRMWARE_DESCRIPTOR_PATHS
-    ):
-        msg = _("Failed to locate firmware descriptor files")
-        raise exception.InternalError(msg)
-
-    _loaders = []
-
-    for path in QEMU_FIRMWARE_DESCRIPTOR_PATHS:
-        if not os.path.exists(path):
-            continue
-
-        for spec_path in sorted(glob.glob(f'{path}/*.json')):
-            with open(spec_path, 'rb') as fh:
-                spec = jsonutils.load(fh)
-
-            _loaders.append(spec)
-
-    return _loaders
 
 
 class LibvirtEventHandler:
@@ -351,8 +318,6 @@ class Host(object):
         self._initialized = False
         self._libvirt_proxy_classes = self._get_libvirt_proxy_classes(libvirt)
         self._libvirt_proxy = self._wrap_libvirt_proxy(libvirt)
-
-        self._loaders: list[dict] | None = None
 
         # A number of features are conditional on support in the hardware,
         # kernel, QEMU, and/or libvirt. These are determined on demand and
@@ -2188,75 +2153,3 @@ class Host(object):
         is meant to be checked elsewhere.
         """
         return self.has_min_version(lv_ver=(7, 9, 0))
-
-    @property
-    def loaders(self) -> list[dict]:
-        """Retrieve details of loader configuration for the host.
-
-        Inspect the firmware metadata files provided by QEMU [1] to retrieve
-        information about the firmware supported by this host. Note that most
-        distros only publish this information for UEFI loaders currently.
-
-        This should be removed when libvirt correctly supports switching
-        between loaders with or without secure boot enabled [2].
-
-        [1] https://github.com/qemu/qemu/blob/v5.2.0/docs/interop/firmware.json
-        [2] https://bugzilla.redhat.com/show_bug.cgi?id=1906500
-
-        :returns: An ordered list of loader configuration dictionaries.
-        """
-        if self._loaders is not None:
-            return self._loaders
-
-        self._loaders = _get_loaders()
-        return self._loaders
-
-    def get_loader(
-        self,
-        arch: str,
-        machine: str,
-        has_secure_boot: bool,
-    ) -> tuple[str, str, bool]:
-        """Get loader for the specified architecture and machine type.
-
-        :returns: A the bootloader executable path and the NVRAM
-            template path and a bool indicating if we need to enable SMM.
-        """
-
-        machine = self.get_canonical_machine_type(arch, machine)
-
-        for loader in self.loaders:
-            try:
-                for target in loader['targets']:
-                    if arch != target['architecture']:
-                        continue
-
-                    for machine_glob in target['machines']:
-                        # the 'machines' attribute supports glob patterns (e.g.
-                        # 'pc-q35-*') so we need to resolve these
-                        if fnmatch.fnmatch(machine, machine_glob):
-                            break
-                    else:
-                        continue
-
-                    # if we've got this far, we have a match on the target
-                    break
-                else:
-                    continue
-
-                # if we request secure boot then we should get it and vice
-                # versa
-                if has_secure_boot != ('secure-boot' in loader['features']):
-                    continue
-
-                return (
-                    loader['mapping']['executable']['filename'],
-                    loader['mapping']['nvram-template']['filename'],
-                    'requires-smm' in loader['features'],
-                )
-            except KeyError:
-                # This indicates that the description structure is new and nova
-                # does not how to handle it
-                continue
-
-        raise exception.UEFINotSupported()

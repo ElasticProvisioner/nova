@@ -184,6 +184,12 @@ Replace ``IP_ADDRESS`` with the IP address from which the proxy is accessible
 by the outside world. For example, this may be the management interface IP
 address of the controller or the VIP.
 
+If using the ironic hypervisor driver, the following additional option is
+supported:
+
+- :oslo.config:option:`ironic.vnc_console_state_timeout`
+
+
 .. _vnc-security:
 
 VNC proxy security
@@ -270,6 +276,11 @@ set.
 
    [vnc]
    auth_schemes=vencrypt,none
+
+.. note::
+
+    Enabling ``vencrypt`` is not yet implemented for ironic, so this is not
+    yet supported for the ironic hypervisor driver.
 
 The :oslo.config:option:`vnc.auth_schemes` values should be listed in order
 of preference. If enabling VeNCrypt on an existing deployment which already has

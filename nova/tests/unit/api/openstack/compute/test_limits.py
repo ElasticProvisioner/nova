@@ -57,7 +57,7 @@ def fake_get_project_quotas(context, project_id, usages=True):
     }
 
     return {
-        k: {'limit': v, 'in_use': v // 2}
+        k: {'limit': v, 'in_use': max(-1, v // 2)}
         for k, v in absolute_limits.items()
     }
 

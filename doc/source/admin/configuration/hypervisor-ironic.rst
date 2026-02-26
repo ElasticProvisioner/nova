@@ -24,6 +24,13 @@ determine the root partition size when a partition image is used (see the
 :ironic-doc:`image documentation
 <install/configure-glance-images.html>`).
 
+VNC console support
+-------------------
+
+The nova noVNC VNC console service can connect to bare metal nodes when
+ironic has
+:ironic-doc:`Graphical console support<install/graphical-console.html>`
+enabled and configured.
 
 Configuration
 -------------

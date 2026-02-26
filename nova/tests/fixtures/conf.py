@@ -60,6 +60,10 @@ class ConfFixture(config_fixture.Config):
         self.conf.set_default(
             'notification_format', "both", group="notifications")
 
+        # Disable graceful shutdown wait otherwise the service stop() will
+        # take time and may end up with tests timeout.
+        self.conf.set_default('manager_shutdown_timeout', 0)
+
         # oslo.limit requires endpoint_id since 2.3.0
         self.conf.set_default('endpoint_id', 'ENDPOINT_ID', group='oslo_limit')
 

@@ -38,7 +38,6 @@ CONF = nova.conf.CONF
 LOG = logging.getLogger(__name__)
 QUOTAS = quota.QUOTAS
 
-
 POWER_ON = 'POWER_ON'
 POWER_OFF = 'POWER_OFF'
 

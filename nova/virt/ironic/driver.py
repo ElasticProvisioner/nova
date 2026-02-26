@@ -1926,6 +1926,115 @@ class IronicDriver(virt_driver.ComputeDriver):
                       instance.uuid)
             raise exception.ConsoleNotAvailable()
 
+    def _get_vnc_console(self, instance):
+        """Acquire novnc console information for an instance.
+
+        :param instance: nova instance
+        :return: a dictionary with below values
+            { 'node': ironic node
+              'console_info': node console info }
+        :raise ConsoleNotAvailable: if console is unavailable
+            for the instance
+        """
+        node = self._validate_instance_and_node(instance)
+        node_id = node.id
+
+        def _get_console():
+            """Request to acquire node console."""
+            try:
+                return self.ironic_connection.get_node_console(node_id)
+            except sdk_exc.SDKException as e:
+                LOG.error('Failed to acquire console information for '
+                          'instance %(inst)s: %(reason)s',
+                          {'inst': instance.uuid, 'reason': e})
+                raise exception.ConsoleNotAvailable()
+
+        def _wait_state():
+            """Wait for the console to be enabled"""
+            console = _get_console()
+            if console['console_enabled']:
+                raise loopingcall.LoopingCallDone(retvalue=console)
+
+            _log_ironic_polling('set vnc console mode', node, instance)
+
+            # Return False to start backing off
+            return False
+
+        def _enable_console():
+            """Request to enable/disable node console."""
+            try:
+                self.ironic_connection.enable_node_console(node_id)
+            except sdk_exc.SDKException as e:
+                LOG.error('Failed to set console mode to "True" '
+                          'for instance %(inst)s: %(reason)s',
+                          {'inst': instance.uuid,
+                           'reason': e})
+                raise exception.ConsoleNotAvailable()
+
+            # Waiting for the console state to be enabled
+            try:
+                timer = loopingcall.BackOffLoopingCall(_wait_state)
+                return timer.start(
+                    starting_interval=_CONSOLE_STATE_CHECKING_INTERVAL,
+                    timeout=CONF.ironic.vnc_console_state_timeout,
+                    jitter=0.5).wait()
+            except loopingcall.LoopingCallTimeOut:
+                LOG.error('Timeout while waiting for console_enabled to be '
+                          'set to "True" on node %(node)s',
+                          {'node': node_id})
+                raise exception.ConsoleNotAvailable()
+
+        # Acquire the console
+        console = _get_console()
+
+        if not console['console_enabled']:
+            console = _enable_console()
+
+        return {'node': node,
+                'console_info': console['console_info']}
+
+    def get_vnc_console(self, context, instance):
+        """Acquire VNC console information.
+
+        :param context: request context
+        :param instance: nova instance
+        :return: ConsoleSerial object
+        :raise ConsoleTypeUnavailable: if VNC console is unavailable
+            for the instance
+        """
+        LOG.debug('Getting VNC console', instance=instance)
+        try:
+            result = self._get_vnc_console(instance)
+        except exception.ConsoleNotAvailable:
+            raise exception.ConsoleTypeUnavailable(console_type='vnc')
+
+        console_info = result['console_info']
+
+        if console_info["type"] != "vnc":
+            LOG.warning('Console type "%(type)s" (of ironic node '
+                        '%(node)s) does not support Nova VNC console',
+                        {'type': console_info["type"],
+                         'node': instance.node},
+                        instance=instance)
+            raise exception.ConsoleTypeUnavailable(console_type='vnc')
+
+        # NOTE(stevebaker): The URL provided in the console_info is actually a
+        # NoVNC URL from Ironic's own novncproxy, so get the actual VNC host
+        # and port from the node driver_internal_info.
+
+        node = self.ironic_connection.get_node(
+            instance.node, fields=('uuid', 'driver_internal_info'))
+        host = node.driver_internal_info.get('vnc_host')
+        port = node.driver_internal_info.get('vnc_port')
+        if host is None or port is None:
+            LOG.error('Invalid VNC console URL "%(url)s" '
+                    '(ironic node %(node)s)',
+                    {'url': console_info["url"],
+                    'node': node.id},
+                    instance=instance)
+            raise exception.ConsoleTypeUnavailable(console_type='vnc')
+        return console_type.ConsoleVNC(host=host, port=port)
+
     def get_serial_console(self, context, instance):
         """Acquire serial console information.
 

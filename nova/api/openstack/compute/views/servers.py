@@ -365,9 +365,9 @@ class ViewBuilder(common.ViewBuilder):
                 # compatible with v2.0 for the ec2 API split out from Nova.
                 # After this, however, new microversions should not be using
                 # the OS-EXT-SRV-ATTR prefix.
-                properties += ['reservation_id', 'launch_index',
-                               'hostname', 'kernel_id', 'ramdisk_id',
-                               'root_device_name']
+                properties += [
+                    'hostname', 'kernel_id', 'launch_index', 'ramdisk_id',
+                    'reservation_id', 'root_device_name']
                 # NOTE(gmann): Since microversion 2.75, PUT and Rebuild
                 # response include all the server attributes including these
                 # extended attributes also. But microversion 2.57 already

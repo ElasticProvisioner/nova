@@ -454,7 +454,10 @@ class ServersControllerTest(_ServersControllerTest):
             ctxt = context.RequestContext('fake', fakes.FAKE_PROJECT_ID)
             return fake_instance.fake_instance_obj(
                 ctxt, expected_attrs=expected_attrs,
-                project_id=self.request.environ['nova.context'].project_id)
+                project_id=self.request.environ['nova.context'].project_id,
+                task_state=None,
+                vm_state=vm_states.ACTIVE,
+            )
         self.mock_get.side_effect = fake_get
 
         self.controller.show(self.request, FAKE_UUID)
@@ -1729,8 +1732,8 @@ class ServersControllerTest(_ServersControllerTest):
             return objects.InstanceList(
                 objects=[fakes.stub_instance_obj(None,
                                                  id=i + 1,
-                                                 user_id='fake',
-                                                 project_id='fake',
+                                                 user_id=uuids.user_id,
+                                                 project_id=uuids.project_id,
                                                  host=i % 2,
                                                  uuid=fakes.get_fake_uuid(i))
                     for i in range(5)])

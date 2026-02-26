@@ -1812,6 +1812,31 @@ class ComputeManager(manager.Manager):
                 self._set_instance_obj_error_state(
                     instance, clean_task_state=True)
 
+    def graceful_shutdown(self):
+        """Gracefully shutdown the manager.
+
+        This will be called during graceful shutdown (SIGTERM) and manager
+        should transit the in-progress tasks to safe termination point. The
+        safe termination point can be either complete or abort them.
+        """
+        # TODO(gmaan) Time based wait is temporary solution and it will be
+        # replaced by the better solution to finish in-progress tasks.
+        if CONF.manager_shutdown_timeout > CONF.graceful_shutdown_timeout:
+            LOG.warning('manager_shutdown_timeout (%s) is higher than '
+                        'graceful_shutdown_timeout (%s); the service may be '
+                        'killed before the manager finishes waiting.',
+                        CONF.manager_shutdown_timeout,
+                        CONF.graceful_shutdown_timeout)
+            sleep_time = max(0, CONF.graceful_shutdown_timeout - 10)
+        else:
+            sleep_time = CONF.manager_shutdown_timeout
+        LOG.debug('Compute service manager is waiting for %s seconds to '
+                  'finish in-progress tasks', sleep_time)
+        time.sleep(sleep_time)
+
+        # Cleanup host will be the last step of manager graceful_shutdown
+        self.cleanup_host()
+
     def cleanup_host(self):
         self.driver.register_event_listener(None)
         self.instance_events.cancel_all_events()

@@ -16,6 +16,17 @@
 #    under the License.
 
 from oslo_config import cfg
+from oslo_service import opts
+
+
+# NOTE(gmaan): 'graceful_shutdown_timeout' is defined in oslo.service with
+# default value of 60 which is too low for Nova services. Override its default
+# here which will be applicable for all Nova services.
+NOVA_DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT = 180
+opts.set_service_opts_defaults(
+    cfg.CONF,
+    graceful_shutdown_timeout=NOVA_DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT)
+
 
 base_options = [
     cfg.IntOpt(
@@ -107,6 +118,30 @@ from a pool maximum once every 60 seconds. The value 0 means that logging
 happens every time work is submitted to the pool. The value -1 means the
 logging is disabled.
 '''),
+    cfg.IntOpt(
+        'manager_shutdown_timeout',
+        default=160,
+        min=0,
+        help="""
+Specifies the total time in seconds for the manager to complete the
+in-progress tasks. During a graceful shutdown, the manager will
+attempt to finish the in-progress tasks within this period. If tasks
+take a longer time, then we need to timeout that and let the service
+complete the remaining graceful shutdown steps.
+
+This timeout must be less than the overall graceful shutdown timeout
+``[DEFAULT]/graceful_shutdown_timeout``.
+
+Possible values:
+
+* 0: The compute manager does not wait to finish in-progress tasks.
+* A positive integer: Number of seconds the manager waits before the service
+                      stops (The default value is 160).
+
+Related options:
+
+* ``[DEFAULT]/graceful_shutdown_timeout``
+"""),
 ]
 
 

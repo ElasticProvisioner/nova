@@ -2863,9 +2863,10 @@ class LibvirtConfigGuestTest(LibvirtConfigBaseTest):
         obj.os_mach_type = "pc-q35-5.1"
         obj.os_loader = '/tmp/OVMF_CODE.secboot.fd'
         obj.os_loader_type = 'pflash'
-        obj.os_nvram = '/foo/bar/instance-00000012_VARS.fd'
+        obj.os_loader_readonly = True
         obj.os_loader_secure = True
         obj.os_loader_stateless = True
+        obj.os_nvram = '/foo/bar/instance-00000012_VARS.fd'
         xml = obj.to_xml()
 
         self.assertxmlequal(
@@ -2878,7 +2879,7 @@ class LibvirtConfigGuestTest(LibvirtConfigBaseTest):
               <os>
                 <type machine="pc-q35-5.1">hvm</type>
                 <loader stateless='yes' secure='yes' readonly='yes' type='pflash'>/tmp/OVMF_CODE.secboot.fd</loader>
-                 <nvram>/foo/bar/instance-00000012_VARS.fd</nvram>
+                <nvram>/foo/bar/instance-00000012_VARS.fd</nvram>
               </os>
             </domain>""",  # noqa: E501
             xml,
@@ -2896,6 +2897,7 @@ class LibvirtConfigGuestTest(LibvirtConfigBaseTest):
         obj.os_mach_type = "pc-q35-5.1"
         obj.os_loader_secure = secure
         obj.os_loader_stateless = stateless
+
         return obj.to_xml()
 
     def test_config_uefi_autoconfigure(self):
@@ -2910,6 +2912,9 @@ class LibvirtConfigGuestTest(LibvirtConfigBaseTest):
               <memory>104857600</memory>
               <vcpu>1</vcpu>
               <os firmware="efi">
+                <firmware>
+                  <feature enabled='no' name='secure-boot'/>
+                </firmware>
                 <type machine="pc-q35-5.1">hvm</type>
                 <loader secure="no"/>
               </os>
@@ -2928,6 +2933,9 @@ class LibvirtConfigGuestTest(LibvirtConfigBaseTest):
               <memory>104857600</memory>
               <vcpu>1</vcpu>
               <os firmware="efi">
+                <firmware>
+                  <feature enabled='yes' name='secure-boot'/>
+                </firmware>
                 <type machine="pc-q35-5.1">hvm</type>
                 <loader secure="yes"/>
               </os>
@@ -2946,6 +2954,9 @@ class LibvirtConfigGuestTest(LibvirtConfigBaseTest):
               <memory>104857600</memory>
               <vcpu>1</vcpu>
               <os firmware="efi">
+                <firmware>
+                  <feature enabled='no' name='secure-boot'/>
+                </firmware>
                 <type machine="pc-q35-5.1">hvm</type>
                 <loader stateless="yes" secure="no"/>
               </os>
@@ -3124,7 +3135,13 @@ class LibvirtConfigGuestTest(LibvirtConfigBaseTest):
         self.assertEqual('fake_machine_type', obj.os_mach_type)
         self.assertEqual('/tmp/vmlinuz', obj.os_kernel)
         self.assertEqual('/usr/lib/xen/boot/hvmloader', obj.os_loader)
+        self.assertNotIn(config.LibvirtConfigGuestFeatureSMM(), obj.features)
         self.assertIsNone(obj.os_loader_type)
+        self.assertIsNone(obj.os_loader_readonly)
+        self.assertIsNone(obj.os_loader_secure)
+        self.assertIsNone(obj.os_loader_stateless)
+        self.assertIsNone(obj.os_nvram)
+        self.assertIsNone(obj.os_nvram_template)
         self.assertEqual('/tmp/ramdisk', obj.os_initrd)
         self.assertEqual('console=xvc0', obj.os_cmdline)
         self.assertEqual('root=xvda', obj.os_root)
@@ -3139,9 +3156,15 @@ class LibvirtConfigGuestTest(LibvirtConfigBaseTest):
             <os>
               <type>hvm</type>
               <loader readonly='yes' type='pflash'>/tmp/OVMF_CODE.fd</loader>
+              <nvram template='/tmp/OVMF_VARS.fd'>/var/lib/libvirt/qemu/nvram/instance.fd</nvram>
             </os>
+            <features>
+              <acpi/>
+              <smm state='on'/>
+            </features>
           </domain>
-        """
+        """  # noqa: E501
+
         obj = config.LibvirtConfigGuest()
         obj.parse_str(xmldoc)
 
@@ -3149,8 +3172,87 @@ class LibvirtConfigGuestTest(LibvirtConfigBaseTest):
         self.assertEqual('hvm', obj.os_type)
         self.assertIsNone(obj.os_mach_type)
         self.assertIsNone(obj.os_kernel)
+        self.assertIn(config.LibvirtConfigGuestFeatureSMM(), obj.features)
         self.assertEqual('/tmp/OVMF_CODE.fd', obj.os_loader)
         self.assertEqual('pflash', obj.os_loader_type)
+        self.assertTrue(obj.os_loader_readonly)
+        self.assertIsNone(obj.os_loader_secure)
+        self.assertIsNone(obj.os_loader_stateless)
+        self.assertEqual('/var/lib/libvirt/qemu/nvram/instance.fd',
+                         obj.os_nvram)
+        self.assertEqual('/tmp/OVMF_VARS.fd', obj.os_nvram_template)
+        self.assertIsNone(obj.os_initrd)
+        self.assertIsNone(obj.os_cmdline)
+        self.assertIsNone(obj.os_root)
+        self.assertIsNone(obj.os_init_path)
+        self.assertEqual([], obj.os_boot_dev)
+        self.assertFalse(obj.os_bootmenu)
+        self.assertIsNone(obj.os_smbios)
+
+        xmldoc = """
+          <domain>
+            <os>
+              <type>hvm</type>
+              <loader readonly='yes' secure='yes' type='pflash'>/tmp/OVMF_CODE.secboot.fd</loader>
+              <nvram template='/tmp/OVMF_VARS.secboot.fd'>/var/lib/libvirt/qemu/nvram/instance.fd</nvram>
+            </os>
+            <features>
+              <smm/>
+            </features>
+          </domain>
+        """  # noqa: E501
+
+        obj = config.LibvirtConfigGuest()
+        obj.parse_str(xmldoc)
+
+        self.assertIsNone(obj.virt_type)
+        self.assertEqual('hvm', obj.os_type)
+        self.assertIsNone(obj.os_mach_type)
+        self.assertIsNone(obj.os_kernel)
+        self.assertIn(config.LibvirtConfigGuestFeatureSMM(), obj.features)
+        self.assertEqual('/tmp/OVMF_CODE.secboot.fd', obj.os_loader)
+        self.assertEqual('pflash', obj.os_loader_type)
+        self.assertTrue(obj.os_loader_readonly)
+        self.assertTrue(obj.os_loader_secure)
+        self.assertIsNone(obj.os_loader_stateless)
+        self.assertEqual('/var/lib/libvirt/qemu/nvram/instance.fd',
+                         obj.os_nvram)
+        self.assertEqual('/tmp/OVMF_VARS.secboot.fd', obj.os_nvram_template)
+        self.assertIsNone(obj.os_initrd)
+        self.assertIsNone(obj.os_cmdline)
+        self.assertIsNone(obj.os_root)
+        self.assertIsNone(obj.os_init_path)
+        self.assertEqual([], obj.os_boot_dev)
+        self.assertFalse(obj.os_bootmenu)
+        self.assertIsNone(obj.os_smbios)
+
+        xmldoc = """
+          <domain>
+            <os>
+              <type>hvm</type>
+              <loader readonly='yes' stateless='yes' type='pflash'>/tmp/OVMF_CODE.fd</loader>
+            </os>
+            <features>
+              <acpi/>
+            </features>
+          </domain>
+        """  # noqa: E501
+
+        obj = config.LibvirtConfigGuest()
+        obj.parse_str(xmldoc)
+
+        self.assertIsNone(obj.virt_type)
+        self.assertEqual('hvm', obj.os_type)
+        self.assertIsNone(obj.os_mach_type)
+        self.assertIsNone(obj.os_kernel)
+        self.assertNotIn(config.LibvirtConfigGuestFeatureSMM(), obj.features)
+        self.assertEqual('/tmp/OVMF_CODE.fd', obj.os_loader)
+        self.assertEqual('pflash', obj.os_loader_type)
+        self.assertTrue(obj.os_loader_readonly)
+        self.assertIsNone(obj.os_loader_secure)
+        self.assertTrue(obj.os_loader_stateless)
+        self.assertIsNone(obj.os_nvram)
+        self.assertIsNone(obj.os_nvram_template)
         self.assertIsNone(obj.os_initrd)
         self.assertIsNone(obj.os_cmdline)
         self.assertIsNone(obj.os_root)
@@ -4056,8 +4158,9 @@ class LibvirtConfigGuestCPUTuneTest(LibvirtConfigBaseTest):
         cputune.emulatorpin = emu
 
         iot = config.LibvirtConfigGuestCPUTuneIOThreadPin()
+        iot.iothread = 1
         iot.cpuset = set([0, 1, 2, 3, 4, 5, 6, 7])
-        cputune.iothreadpin = iot
+        cputune.iothreadpin.append(iot)
 
         sch0 = config.LibvirtConfigGuestCPUTuneVCPUSched()
         sch0.vcpus = set([0, 1, 2, 3])
@@ -4073,7 +4176,7 @@ class LibvirtConfigGuestCPUTuneTest(LibvirtConfigBaseTest):
         self.assertXmlEqual("""
           <cputune>
             <emulatorpin cpuset="0-7"/>
-            <iothreadpin cpuset="0-7"/>
+            <iothreadpin iothread="1" cpuset="0-7"/>
             <vcpupin vcpu="0" cpuset="0-1"/>
             <vcpupin vcpu="1" cpuset="2-3"/>
             <vcpupin vcpu="2" cpuset="4-5"/>

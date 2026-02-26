@@ -3444,6 +3444,8 @@ class IronicDriverConsoleTestCase(test.NoDBTestCase):
         CONF.set_default('api_retry_interval', default=0, group='ironic')
         CONF.set_default(
             'serial_console_state_timeout', default=1, group='ironic')
+        CONF.set_default(
+            'vnc_console_state_timeout', default=1, group='ironic')
 
         self.stub_out('nova.virt.ironic.driver.IronicDriver.'
                       '_validate_instance_and_node',
@@ -3590,6 +3592,139 @@ class IronicDriverConsoleTestCase(test.NoDBTestCase):
 
         mock_timer.start.assert_called_with(starting_interval=0.05, timeout=1,
                                             jitter=0.5)
+
+    @mock.patch.object(ironic_driver, '_CONSOLE_STATE_CHECKING_INTERVAL', 0.05)
+    def test_get_vnc_console_disabled(self):
+
+        console_data_disabled = self._create_console_data(
+                enabled=False,
+                console_type='vnc',
+                url='http://127.0.0.1:10001/vnc_lite.html')
+        console_data_enabled = self._create_console_data(
+                enabled=True,
+                console_type='vnc',
+                url='http://127.0.0.1:10001/vnc_lite.html')
+
+        self.mock_conn.get_node_console.side_effect = [
+            console_data_disabled,
+            console_data_disabled,
+            console_data_disabled,
+            console_data_enabled
+        ]
+        self.mock_conn.get_node.return_value = _get_cached_node(
+            driver_internal_info={
+                'vnc_host': '127.0.0.1',
+                'vnc_port': 10000})
+
+        result = self.driver.get_vnc_console(self.ctx, self.instance)
+
+        self.assertEqual(4, self.mock_conn.get_node_console.call_count)
+        self.assertEqual(1, self.mock_conn.enable_node_console.call_count)
+        self.assertIsInstance(result, console_type.ConsoleVNC)
+        self.assertEqual('127.0.0.1', result.host)
+        self.assertEqual(10000, result.port)
+
+    @mock.patch.object(ironic_driver, '_CONSOLE_STATE_CHECKING_INTERVAL', 0.05)
+    def test_get_vnc_console_enable_timeout(self):
+
+        self.mock_conn.get_node_console.return_value = \
+            self._create_console_data(
+                enabled=False,
+                console_type='vnc',
+                url='http://127.0.0.1:10001/vnc_lite.html')
+
+        self.mock_conn.get_node.return_value = _get_cached_node(
+            driver_internal_info={
+                'vnc_host': '127.0.0.1',
+                'vnc_port': 10000})
+
+        self.assertRaises(exception.ConsoleTypeUnavailable,
+                          self.driver.get_vnc_console,
+                          self.ctx, self.instance)
+
+        self.assertGreater(self.mock_conn.get_node_console.call_count, 2)
+        self.assertEqual(1, self.mock_conn.enable_node_console.call_count)
+
+    def test_get_vnc_console_enabled(self):
+
+        self.mock_conn.get_node_console.return_value = \
+            self._create_console_data(
+                enabled=True,
+                console_type='vnc',
+                url='http://127.0.0.1:10001/vnc_lite.html')
+
+        self.mock_conn.get_node.return_value = _get_cached_node(
+            driver_internal_info={
+                'vnc_host': '127.0.0.1',
+                'vnc_port': 10000})
+
+        result = self.driver.get_vnc_console(self.ctx, self.instance)
+
+        self.assertEqual(1, self.mock_conn.get_node_console.call_count)
+        self.assertEqual(0, self.mock_conn.enable_node_console.call_count)
+        self.assertIsInstance(result, console_type.ConsoleVNC)
+        self.assertEqual('127.0.0.1', result.host)
+        self.assertEqual(10000, result.port)
+
+    def test_get_vnc_console_missing_internal_info(self):
+
+        self.mock_conn.get_node_console.return_value = \
+            self._create_console_data(
+                enabled=True,
+                console_type='vnc',
+                url='http://127.0.0.1:10001/vnc_lite.html')
+
+        self.mock_conn.get_node.return_value = _get_cached_node(
+            driver_internal_info={})
+
+        self.assertRaises(exception.ConsoleTypeUnavailable,
+                          self.driver.get_vnc_console,
+                          self.ctx, self.instance)
+
+        self.assertEqual(1, self.mock_conn.get_node_console.call_count)
+        self.assertEqual(0, self.mock_conn.enable_node_console.call_count)
+
+    def test_get_vnc_console_wrong_type(self):
+
+        self.mock_conn.get_node_console.return_value = \
+            self._create_console_data(
+                enabled=True,
+                console_type='socat',
+                url='tcp://127.0.0.1:10001')
+
+        self.assertRaises(exception.ConsoleTypeUnavailable,
+                          self.driver.get_vnc_console,
+                          self.ctx, self.instance)
+
+        self.assertEqual(1, self.mock_conn.get_node_console.call_count)
+        self.assertEqual(0, self.mock_conn.enable_node_console.call_count)
+
+    def test_get_vnc_console_api_error(self):
+
+        self.mock_conn.get_node_console.side_effect = \
+            sdk_exc.ForbiddenException()
+
+        self.assertRaises(exception.ConsoleTypeUnavailable,
+                          self.driver.get_vnc_console,
+                          self.ctx, self.instance)
+
+        self.assertEqual(1, self.mock_conn.get_node_console.call_count)
+
+    def test_get_vnc_console_enable_api_error(self):
+
+        self.mock_conn.get_node_console.return_value = \
+            self._create_console_data(
+                enabled=False,
+                console_type='vnc',
+                url='http://127.0.0.1:10001/vnc_lite.html')
+        self.mock_conn.enable_node_console.side_effect = \
+            sdk_exc.ForbiddenException()
+
+        self.assertRaises(exception.ConsoleTypeUnavailable,
+                          self.driver.get_vnc_console,
+                          self.ctx, self.instance)
+
+        self.assertEqual(1, self.mock_conn.get_node_console.call_count)
 
     def test_get_serial_console_socat(self):
         temp_data = {'target_mode': True}

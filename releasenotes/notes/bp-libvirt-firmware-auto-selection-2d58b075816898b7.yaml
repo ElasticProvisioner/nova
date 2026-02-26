@@ -1,0 +1,16 @@
+---
+features:
+  - |
+    Now the libvirt virt driver uses firmware auto-selection by libvirt, which
+    is capable to select the appropriate firmware files according to
+    the requested features. This built-in auto-selection extends the existing
+    firmware selection capability within nova, and checks a few more feature
+    flags such as amd-sev and also supports new firmware types such as rom
+    firmware.
+
+upgrades:
+  - |
+    Existing UEFI guests may start using a new firmware file after operations
+    like rebuild or resize (including cold-migration) which generates libvirt
+    domain XML from scratch, due to the extended logic to select
+    the appropriate files.

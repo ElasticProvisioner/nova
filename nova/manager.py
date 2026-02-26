@@ -115,6 +115,14 @@ class Manager(PeriodicTasks, metaclass=ManagerMeta):
         """
         pass
 
+    def graceful_shutdown(self):
+        """Hook to gracefully shutdown the manager.
+
+        Child classes should override this method.
+        """
+
+        pass
+
     def cleanup_host(self):
         """Hook to do cleanup work when the service shuts down.
 

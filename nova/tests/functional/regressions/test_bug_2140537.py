@@ -22,7 +22,6 @@ in element 'iothreadpin'".
 """
 
 from lxml import etree
-from unittest import mock
 
 from nova.tests.fixtures import libvirt as fakelibvirt
 from nova.tests.functional import integrated_helpers
@@ -46,15 +45,6 @@ class TestIOThreadPinningPinnedCPU(
     ADDITIONAL_FILTERS = ['NUMATopologyFilter']
 
     def setUp(self):
-        # TODO(lajoskatona): remove this patch when the fix for
-        # bug/2140537 is merged, and the libvirt fixture has the
-        # necessary validation for XML fields for IOThreads.
-        patcher = mock.patch.object(
-            fakelibvirt.Connection, 'defineXML',
-            fakelibvirt.Connection._defineXMLIOThreads)
-        patcher.start()
-        self.addCleanup(patcher.stop)
-
         super().setUp()
         self.hostname = self.start_compute(
             hostname='host1',
@@ -91,20 +81,34 @@ class TestIOThreadPinningPinnedCPU(
 
         # BUG: This fails with libvirt error about missing 'iothread' attribute
         # The server creation will fail and go to ERROR state
+        # server = self._create_server(
+        #     flavor_id=flavor, host='host1', networks='none',
+        #     expected_state='ERROR')
         server = self._create_server(
             flavor_id=flavor, host='host1', networks='none',
-            expected_state='ERROR')
+            expected_state='ACTIVE')
 
         # Verify the server is in ERROR state due to the libvirt XML error
-        self.assertEqual('ERROR', server['status'])
+        # self.assertEqual('ERROR', server['status'])
 
         # Check the fault message contains the libvirt error
-        self.assertIn('Exceeded maximum number of retries',
-                      server['fault']['message'])
+        # self.assertIn('Exceeded maximum number of retries',
+        #               server['fault']['message'])
         # Check the logs for the exception
-        self.assertIn("Missing required attribute 'iothread'",
-                      self.stdlog.logger.output)
-        self.assertIn("element 'iothreadpin'", self.stdlog.logger.output)
+        # self.assertIn("Missing required attribute 'iothread'",
+        #               self.stdlog.logger.output)
+        # self.assertIn("element 'iothreadpin'", self.stdlog.logger.output)
+
+        # Get source XML and verify pinning matches cpu_shared_set
+        conn = self.host.driver._host.get_connection()
+        dom = conn.lookupByUUIDString(server['id'])
+        srv_xml = dom.XMLDesc(0)
+        srv_emulatorpin = self._get_xml_element(
+            srv_xml, './cputune/emulatorpin')
+        srv_iothreadpin = self._get_xml_element(
+            srv_xml, './cputune/iothreadpin')
+        self.assertIsNotNone(srv_emulatorpin)
+        self.assertIsNotNone(srv_iothreadpin)
 
     def test_iothread_pinning_explicit_numa(self):
         """Test iothread pinning with explicit multi-node NUMA topology."""
@@ -120,46 +124,46 @@ class TestIOThreadPinningPinnedCPU(
         flavor = self._create_flavor(vcpu=4, extra_spec=extra_spec)
 
         # Server should go ACTIVE
-        # server = self._create_server(
-        #     flavor_id=flavor, host='host1', networks='none',
-        #     expected_state='ACTIVE')
         server = self._create_server(
             flavor_id=flavor, host='host1', networks='none',
-            expected_state='ERROR')
+            expected_state='ACTIVE')
+        # server = self._create_server(
+        #     flavor_id=flavor, host='host1', networks='none',
+        #     expected_state='ERROR')
 
-        # conn = self.host.driver._host.get_connection()
-        # dom = conn.lookupByUUIDString(server['id'])
-        # srv_xml = dom.XMLDesc(0)
+        conn = self.host.driver._host.get_connection()
+        dom = conn.lookupByUUIDString(server['id'])
+        srv_xml = dom.XMLDesc(0)
 
-        # # Should have iothreads element
-        # srv_iothread = self._get_xml_element(srv_xml, './iothreads')
-        # self.assertIsNotNone(srv_iothread)
-        # self.assertEqual('1', srv_iothread.text)
+        # Should have iothreads element
+        srv_iothread = self._get_xml_element(srv_xml, './iothreads')
+        self.assertIsNotNone(srv_iothread)
+        self.assertEqual('1', srv_iothread.text)
 
-        # # Should have emulatorpin and iothreadpin
-        # srv_emulatorpin = self._get_xml_element(
-        #     srv_xml, './cputune/emulatorpin')
-        # srv_iothreadpin = self._get_xml_element(
-        #     srv_xml, './cputune/iothreadpin')
-        # self.assertIsNotNone(srv_emulatorpin)
-        # self.assertIsNotNone(srv_iothreadpin)
+        # Should have emulatorpin and iothreadpin
+        srv_emulatorpin = self._get_xml_element(
+            srv_xml, './cputune/emulatorpin')
+        srv_iothreadpin = self._get_xml_element(
+            srv_xml, './cputune/iothreadpin')
+        self.assertIsNotNone(srv_emulatorpin)
+        self.assertIsNotNone(srv_iothreadpin)
 
-        # # iothreadpin should have iothread attribute set to 1
-        # self.assertEqual('1', srv_iothreadpin.get('iothread'))
+        # iothreadpin should have iothread attribute set to 1
+        self.assertEqual('1', srv_iothreadpin.get('iothread'))
 
-        # # Both should be pinned to the union of NUMA nodes
-        # self.assertEqual(srv_emulatorpin.get('cpuset'),
-        #                  srv_iothreadpin.get('cpuset'))
+        # Both should be pinned to the union of NUMA nodes
+        self.assertEqual(srv_emulatorpin.get('cpuset'),
+                         srv_iothreadpin.get('cpuset'))
 
-        self.assertEqual('ERROR', server['status'])
+        # self.assertEqual('ERROR', server['status'])
 
-        # Check the fault message contains the libvirt error
-        self.assertIn('Exceeded maximum number of retries',
-                      server['fault']['message'])
-        # Check the logs for the exception
-        self.assertIn("Missing required attribute 'iothread'",
-                      self.stdlog.logger.output)
-        self.assertIn("element 'iothreadpin'", self.stdlog.logger.output)
+        # # Check the fault message contains the libvirt error
+        # self.assertIn('Exceeded maximum number of retries',
+        #               server['fault']['message'])
+        # # Check the logs for the exception
+        # self.assertIn("Missing required attribute 'iothread'",
+        #               self.stdlog.logger.output)
+        # self.assertIn("element 'iothreadpin'", self.stdlog.logger.output)
 
     def test_iothread_pinning_isolated_emulator(self):
         """Test iothread pinning with isolated emulator threads policy."""
@@ -174,52 +178,52 @@ class TestIOThreadPinningPinnedCPU(
         }
         flavor = self._create_flavor(vcpu=2, extra_spec=extra_spec)
 
-        server = self._create_server(
-            flavor_id=flavor, host='host1', networks='none',
-            expected_state='ERROR')
-        # Server should go ACTIVE
         # server = self._create_server(
         #     flavor_id=flavor, host='host1', networks='none',
-        #     expected_state='ACTIVE')
+        #     expected_state='ERROR')
+        # Server should go ACTIVE
+        server = self._create_server(
+            flavor_id=flavor, host='host1', networks='none',
+            expected_state='ACTIVE')
 
-        # conn = self.host.driver._host.get_connection()
-        # dom = conn.lookupByUUIDString(server['id'])
-        # srv_xml = dom.XMLDesc(0)
+        conn = self.host.driver._host.get_connection()
+        dom = conn.lookupByUUIDString(server['id'])
+        srv_xml = dom.XMLDesc(0)
 
-        # # Should have iothreads element
-        # srv_iothread = self._get_xml_element(srv_xml, './iothreads')
-        # self.assertIsNotNone(srv_iothread)
-        # self.assertEqual('1', srv_iothread.text)
+        # Should have iothreads element
+        srv_iothread = self._get_xml_element(srv_xml, './iothreads')
+        self.assertIsNotNone(srv_iothread)
+        self.assertEqual('1', srv_iothread.text)
 
-        # # Should have emulatorpin and iothreadpin
-        # srv_emulatorpin = self._get_xml_element(
-        #     srv_xml, './cputune/emulatorpin')
-        # srv_iothreadpin = self._get_xml_element(
-        #     srv_xml, './cputune/iothreadpin')
-        # self.assertIsNotNone(srv_emulatorpin)
-        # self.assertIsNotNone(srv_iothreadpin)
+        # Should have emulatorpin and iothreadpin
+        srv_emulatorpin = self._get_xml_element(
+            srv_xml, './cputune/emulatorpin')
+        srv_iothreadpin = self._get_xml_element(
+            srv_xml, './cputune/iothreadpin')
+        self.assertIsNotNone(srv_emulatorpin)
+        self.assertIsNotNone(srv_iothreadpin)
 
-        # # iothreadpin should have iothread attribute set to 1
-        # self.assertEqual('1', srv_iothreadpin.get('iothread'))
+        # iothreadpin should have iothread attribute set to 1
+        self.assertEqual('1', srv_iothreadpin.get('iothread'))
 
-        # # Both should be pinned to the same reserved/isolated CPU
-        # self.assertEqual(srv_emulatorpin.get('cpuset'),
-        #                  srv_iothreadpin.get('cpuset'))
+        # Both should be pinned to the same reserved/isolated CPU
+        self.assertEqual(srv_emulatorpin.get('cpuset'),
+                         srv_iothreadpin.get('cpuset'))
 
-        # # Should be pinned to a single CPU (the reserved one)
-        # # With vcpu=2 and isolate policy, one extra CPU is reserved
-        # cpuset = srv_iothreadpin.get('cpuset')
-        # # The cpuset should be a single CPU from cpu_dedicated_set
-        # self.assertIsNotNone(cpuset)
-        self.assertEqual('ERROR', server['status'])
+        # Should be pinned to a single CPU (the reserved one)
+        # With vcpu=2 and isolate policy, one extra CPU is reserved
+        cpuset = srv_iothreadpin.get('cpuset')
+        # The cpuset should be a single CPU from cpu_dedicated_set
+        self.assertIsNotNone(cpuset)
+        # self.assertEqual('ERROR', server['status'])
 
-        # Check the fault message contains the libvirt error
-        self.assertIn('Exceeded maximum number of retries',
-                      server['fault']['message'])
-        # Check the logs for the exception
-        self.assertIn("Missing required attribute 'iothread'",
-                      self.stdlog.logger.output)
-        self.assertIn("element 'iothreadpin'", self.stdlog.logger.output)
+        # # Check the fault message contains the libvirt error
+        # self.assertIn('Exceeded maximum number of retries',
+        #               server['fault']['message'])
+        # # Check the logs for the exception
+        # self.assertIn("Missing required attribute 'iothread'",
+        #               self.stdlog.logger.output)
+        # self.assertIn("element 'iothreadpin'", self.stdlog.logger.output)
 
     def test_iothread_pinning_shared_emulator(self):
         """Test iothread pinning with shared emulator threads policy."""
@@ -234,48 +238,48 @@ class TestIOThreadPinningPinnedCPU(
         }
         flavor = self._create_flavor(vcpu=2, extra_spec=extra_spec)
 
-        server = self._create_server(
-            flavor_id=flavor, host='host1', networks='none',
-            expected_state='ERROR')
-        # Server should go ACTIVE
         # server = self._create_server(
         #     flavor_id=flavor, host='host1', networks='none',
-        #     expected_state='ACTIVE')
+        #     expected_state='ERROR')
+        # Server should go ACTIVE
+        server = self._create_server(
+            flavor_id=flavor, host='host1', networks='none',
+            expected_state='ACTIVE')
 
-        # conn = self.host.driver._host.get_connection()
-        # dom = conn.lookupByUUIDString(server['id'])
-        # srv_xml = dom.XMLDesc(0)
+        conn = self.host.driver._host.get_connection()
+        dom = conn.lookupByUUIDString(server['id'])
+        srv_xml = dom.XMLDesc(0)
 
-        # # Should have iothreads element
-        # srv_iothread = self._get_xml_element(srv_xml, './iothreads')
-        # self.assertIsNotNone(srv_iothread)
-        # self.assertEqual('1', srv_iothread.text)
+        # Should have iothreads element
+        srv_iothread = self._get_xml_element(srv_xml, './iothreads')
+        self.assertIsNotNone(srv_iothread)
+        self.assertEqual('1', srv_iothread.text)
 
-        # # Should have emulatorpin and iothreadpin
-        # srv_emulatorpin = self._get_xml_element(
-        #     srv_xml, './cputune/emulatorpin')
-        # srv_iothreadpin = self._get_xml_element(
-        #     srv_xml, './cputune/iothreadpin')
-        # self.assertIsNotNone(srv_emulatorpin)
-        # self.assertIsNotNone(srv_iothreadpin)
+        # Should have emulatorpin and iothreadpin
+        srv_emulatorpin = self._get_xml_element(
+            srv_xml, './cputune/emulatorpin')
+        srv_iothreadpin = self._get_xml_element(
+            srv_xml, './cputune/iothreadpin')
+        self.assertIsNotNone(srv_emulatorpin)
+        self.assertIsNotNone(srv_iothreadpin)
 
-        # # iothreadpin should have iothread attribute set to 1
-        # self.assertEqual('1', srv_iothreadpin.get('iothread'))
+        # iothreadpin should have iothread attribute set to 1
+        self.assertEqual('1', srv_iothreadpin.get('iothread'))
 
-        # # Both should be pinned to cpu_shared_set (0-1)
-        # self.assertEqual(srv_emulatorpin.get('cpuset'),
-        #                  srv_iothreadpin.get('cpuset'))
-        # self.assertEqual('0-1', srv_iothreadpin.get('cpuset'))
+        # Both should be pinned to cpu_shared_set (0-1)
+        self.assertEqual(srv_emulatorpin.get('cpuset'),
+                         srv_iothreadpin.get('cpuset'))
+        self.assertEqual('0-1', srv_iothreadpin.get('cpuset'))
 
-        self.assertEqual('ERROR', server['status'])
+        # self.assertEqual('ERROR', server['status'])
 
-        # Check the fault message contains the libvirt error
-        self.assertIn('Exceeded maximum number of retries',
-                      server['fault']['message'])
-        # Check the logs for the exception
-        self.assertIn("Missing required attribute 'iothread'",
-                      self.stdlog.logger.output)
-        self.assertIn("element 'iothreadpin'", self.stdlog.logger.output)
+        # # Check the fault message contains the libvirt error
+        # self.assertIn('Exceeded maximum number of retries',
+        #               server['fault']['message'])
+        # # Check the logs for the exception
+        # self.assertIn("Missing required attribute 'iothread'",
+        #               self.stdlog.logger.output)
+        # self.assertIn("element 'iothreadpin'", self.stdlog.logger.output)
 
     def test_iothread_no_pinning(self):
         # No CPU pinning (shared CPUs only)

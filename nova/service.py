@@ -308,33 +308,44 @@ class Service(service.Service):
         except exception.NotFound:
             LOG.warning('Service killed that has no database entry')
 
-    def stop(self):
-        """stop the service and clean up."""
+    def _shutdown_rpc_server(self, rpc_server, topic):
         try:
             LOG.debug('%s service stopping RPC server on topic: %s',
-                      self.binary, self.topic)
-            self.rpcserver.stop()
-            self.rpcserver.wait()
+                      self.binary, topic)
+            rpc_server.stop()
+            rpc_server.wait()
             LOG.debug('%s service stopped RPC server on topic: %s',
-                      self.binary, self.topic)
-            if self.rpcserver_alt is not None:
-                LOG.debug('%s service stopping the 2nd RPC server on '
-                          'topic: %s', self.binary, self.topic_alt)
-                self.rpcserver_alt.stop()
-                self.rpcserver_alt.wait()
-                LOG.debug('%s service stopped the 2nd RPC server on '
-                          'topic: %s', self.binary, self.topic_alt)
-        except Exception as exc:
-            LOG.exception('Service error occurred during RPC server '
-                          'stop & wait, Error: %s', str(exc))
-            pass
-
-        try:
-            self.manager.cleanup_host()
+                      self.binary, topic)
         except Exception:
-            LOG.exception('Service error occurred during cleanup_host')
-            pass
+            LOG.exception('Error occurred during RPC server stop & wait.')
 
+    def stop(self):
+        """stop the service and clean up."""
+        LOG.debug('%s service graceful shutdown started.', self.binary)
+
+        # This RPC server handles new requests during normal operation. During
+        # graceful shutdown, we limit the RPC requests the service can handle.
+        # So we stop the main RPC server here and let the alternative RPC
+        # server handle the remaining requests for the ongoing operations.
+        self._shutdown_rpc_server(self.rpcserver, self.topic)
+        try:
+            LOG.debug('%s manager graceful shutdown started.',
+                      self.binary)
+            self.manager.graceful_shutdown()
+            LOG.debug('%s manager graceful shutdown finished.',
+                      self.binary)
+        except Exception:
+            LOG.exception('Error occurred during %s manager graceful '
+                          'shutdown', self.binary)
+
+        if self.rpcserver_alt is not None:
+            # During graceful shutdown, manager will use this RPC server to
+            # finish the in-progress tasks so this RPC server will be stopped
+            # at the end.
+            self._shutdown_rpc_server(
+                    self.rpcserver_alt, self.topic_alt)
+
+        LOG.debug('%s service graceful shutdown finished.', self.binary)
         super(Service, self).stop()
 
     def periodic_tasks(self, raise_on_error=False):

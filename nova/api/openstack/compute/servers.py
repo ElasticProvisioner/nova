@@ -89,6 +89,7 @@ INVALID_FLAVOR_IMAGE_EXCEPTIONS = (
 )
 
 
+@validation.validated
 class ServersController(wsgi.Controller):
     """The Server API base controller class for the OpenStack API."""
 
@@ -113,11 +114,13 @@ class ServersController(wsgi.Controller):
         self.compute_api = compute.API()
 
     @wsgi.expected_errors((400, 403))
-    @validation.query_schema(schema.query_params_v275, '2.75')
-    @validation.query_schema(schema.query_params_v273, '2.73', '2.74')
-    @validation.query_schema(schema.query_params_v266, '2.66', '2.72')
-    @validation.query_schema(schema.query_params_v226, '2.26', '2.65')
     @validation.query_schema(schema.query_params_v21, '2.1', '2.25')
+    @validation.query_schema(schema.query_params_v226, '2.26', '2.65')
+    @validation.query_schema(schema.query_params_v266, '2.66', '2.72')
+    @validation.query_schema(schema.query_params_v273, '2.73', '2.74')
+    @validation.query_schema(schema.query_params_v275, '2.75')
+    @validation.response_body_schema(schema.index_response, '2.1', '2.68')
+    @validation.response_body_schema(schema.index_response_v269, '2.69')
     def index(self, req):
         """Returns a list of server names and ids for a given user."""
         context = req.environ['nova.context']
@@ -129,11 +132,25 @@ class ServersController(wsgi.Controller):
         return servers
 
     @wsgi.expected_errors((400, 403))
-    @validation.query_schema(schema.query_params_v275, '2.75')
-    @validation.query_schema(schema.query_params_v273, '2.73', '2.74')
-    @validation.query_schema(schema.query_params_v266, '2.66', '2.72')
-    @validation.query_schema(schema.query_params_v226, '2.26', '2.65')
     @validation.query_schema(schema.query_params_v21, '2.1', '2.25')
+    @validation.query_schema(schema.query_params_v226, '2.26', '2.65')
+    @validation.query_schema(schema.query_params_v266, '2.66', '2.72')
+    @validation.query_schema(schema.query_params_v273, '2.73', '2.74')
+    @validation.query_schema(schema.query_params_v275, '2.75')
+    @validation.response_body_schema(schema.detail_response, '2.1', '2.2')
+    @validation.response_body_schema(schema.detail_response_v23, '2.3', '2.8')
+    @validation.response_body_schema(schema.detail_response_v29, '2.9', '2.15')
+    @validation.response_body_schema(schema.detail_response_v216, '2.16', '2.18')  # noqa: E501
+    @validation.response_body_schema(schema.detail_response_v219, '2.19', '2.25')  # noqa: E501
+    @validation.response_body_schema(schema.detail_response_v226, '2.26', '2.46')  # noqa: E501
+    @validation.response_body_schema(schema.detail_response_v247, '2.47', '2.62')  # noqa: E501
+    @validation.response_body_schema(schema.detail_response_v263, '2.63', '2.68')  # noqa: E501
+    @validation.response_body_schema(schema.detail_response_v269, '2.69', '2.72')  # noqa: E501
+    @validation.response_body_schema(schema.detail_response_v273, '2.73', '2.89')  # noqa: E501
+    @validation.response_body_schema(schema.detail_response_v290, '2.90', '2.95')  # noqa: E501
+    @validation.response_body_schema(schema.detail_response_v296, '2.96', '2.97')  # noqa: E501
+    @validation.response_body_schema(schema.detail_response_v298, '2.98', '2.99')  # noqa: E501
+    @validation.response_body_schema(schema.detail_response_v2100, '2.100')
     def detail(self, req):
         """Returns a list of server details for a given user."""
         context = req.environ['nova.context']
@@ -458,6 +475,21 @@ class ServersController(wsgi.Controller):
 
     @wsgi.expected_errors(404)
     @validation.query_schema(schema.show_query)
+    @validation.response_body_schema(schema.show_response, '2.0', '2.2')
+    @validation.response_body_schema(schema.show_response_v23, '2.3', '2.8')
+    @validation.response_body_schema(schema.show_response_v29, '2.9', '2.15')
+    @validation.response_body_schema(schema.show_response_v216, '2.16', '2.18')
+    @validation.response_body_schema(schema.show_response_v219, '2.19', '2.25')
+    @validation.response_body_schema(schema.show_response_v226, '2.26', '2.46')
+    @validation.response_body_schema(schema.show_response_v247, '2.47', '2.62')
+    @validation.response_body_schema(schema.show_response_v263, '2.63', '2.68')
+    @validation.response_body_schema(schema.show_response_v269, '2.69', '2.70')
+    @validation.response_body_schema(schema.show_response_v271, '2.71', '2.72')
+    @validation.response_body_schema(schema.show_response_v273, '2.73', '2.89')
+    @validation.response_body_schema(schema.show_response_v290, '2.90', '2.95')
+    @validation.response_body_schema(schema.show_response_v296, '2.96', '2.97')
+    @validation.response_body_schema(schema.show_response_v298, '2.98', '2.99')
+    @validation.response_body_schema(schema.show_response_v2100, '2.100')
     def show(self, req, id):
         """Returns server details by server id."""
         context = req.environ['nova.context']
@@ -676,6 +708,7 @@ class ServersController(wsgi.Controller):
     @validation.schema(schema.create_v274, '2.74', '2.89')
     @validation.schema(schema.create_v290, '2.90', '2.93')
     @validation.schema(schema.create_v294, '2.94')
+    @validation.response_body_schema(schema.create_response)
     def create(self, req, body):
         """Creates a new server for a given user."""
         context = req.environ['nova.context']
@@ -906,6 +939,18 @@ class ServersController(wsgi.Controller):
     @validation.schema(schema.update_v219, '2.19', '2.89')
     @validation.schema(schema.update_v290, '2.90', '2.93')
     @validation.schema(schema.update_v294, '2.94')
+    @validation.response_body_schema(schema.update_response, '2.0', '2.8')
+    @validation.response_body_schema(schema.update_response_v29, '2.9', '2.18')
+    @validation.response_body_schema(schema.update_response_v219, '2.19', '2.25')  # noqa: E501
+    @validation.response_body_schema(schema.update_response_v226, '2.26', '2.46')  # noqa: E501
+    @validation.response_body_schema(schema.update_response_v247, '2.47', '2.62')  # noqa: E501
+    @validation.response_body_schema(schema.update_response_v263, '2.63', '2.70')  # noqa: E501
+    @validation.response_body_schema(schema.update_response_v271, '2.71', '2.72')  # noqa: E501
+    @validation.response_body_schema(schema.update_response_v273, '2.73', '2.74')  # noqa: E501
+    @validation.response_body_schema(schema.update_response_v275, '2.75', '2.95')  # noqa: E501
+    @validation.response_body_schema(schema.update_response_v296, '2.96', '2.97')  # noqa: E501
+    @validation.response_body_schema(schema.update_response_v298, '2.98', '2.99')  # noqa: E501
+    @validation.response_body_schema(schema.update_response_v2100, '2.100')
     def update(self, req, id, body):
         """Update server then pass on to version-specific controller."""
 
@@ -934,41 +979,41 @@ class ServersController(wsgi.Controller):
         try:
             instance = self.compute_api.update_instance(
                 ctxt, instance, update_dict)
-
-            show_server_groups = api_version_request.is_supported(req, '2.71')
-            # NOTE(gmann): Starting from microversion 2.75, PUT and Rebuild
-            # API response will show all attributes like GET /servers API.
-            show_all_attributes = api_version_request.is_supported(req, '2.75')
-            extend_address = show_all_attributes
-            show_AZ = show_all_attributes
-            show_config_drive = show_all_attributes
-            show_keypair = show_all_attributes
-            show_srv_usg = show_all_attributes
-            show_sec_grp = show_all_attributes
-            show_extended_status = show_all_attributes
-            show_extended_volumes = show_all_attributes
-            # NOTE(gmann): Below attributes need to be added in response
-            # if respective policy allows.So setting these as None
-            # to perform the policy check in view builder.
-            show_extended_attr = None if show_all_attributes else False
-            show_host_status = None if show_all_attributes else False
-
-            return self._view_builder.show(
-                req, instance,
-                extend_address=extend_address,
-                show_AZ=show_AZ,
-                show_config_drive=show_config_drive,
-                show_extended_attr=show_extended_attr,
-                show_host_status=show_host_status,
-                show_keypair=show_keypair,
-                show_srv_usg=show_srv_usg,
-                show_sec_grp=show_sec_grp,
-                show_extended_status=show_extended_status,
-                show_extended_volumes=show_extended_volumes,
-                show_server_groups=show_server_groups)
         except exception.InstanceNotFound:
             msg = _("Instance could not be found")
             raise exc.HTTPNotFound(explanation=msg)
+
+        show_server_groups = api_version_request.is_supported(req, '2.71')
+        # NOTE(gmann): Starting from microversion 2.75, PUT and Rebuild
+        # API response will show all attributes like GET /servers API.
+        show_all_attributes = api_version_request.is_supported(req, '2.75')
+        extend_address = show_all_attributes
+        show_AZ = show_all_attributes
+        show_config_drive = show_all_attributes
+        show_keypair = show_all_attributes
+        show_srv_usg = show_all_attributes
+        show_sec_grp = show_all_attributes
+        show_extended_status = show_all_attributes
+        show_extended_volumes = show_all_attributes
+        # NOTE(gmann): Below attributes need to be added in response
+        # if respective policy allows.So setting these as None
+        # to perform the policy check in view builder.
+        show_extended_attr = None if show_all_attributes else False
+        show_host_status = None if show_all_attributes else False
+
+        return self._view_builder.show(
+            req, instance,
+            extend_address=extend_address,
+            show_AZ=show_AZ,
+            show_config_drive=show_config_drive,
+            show_extended_attr=show_extended_attr,
+            show_host_status=show_host_status,
+            show_keypair=show_keypair,
+            show_srv_usg=show_srv_usg,
+            show_sec_grp=show_sec_grp,
+            show_extended_status=show_extended_status,
+            show_extended_volumes=show_extended_volumes,
+            show_server_groups=show_server_groups)
 
     # NOTE(gmann): Returns 204 for backwards compatibility but should be 202
     # for representing async API as this API just accepts the request and
@@ -1099,6 +1144,7 @@ class ServersController(wsgi.Controller):
 
     @wsgi.response(204)
     @wsgi.expected_errors((404, 409))
+    @validation.response_body_schema(schema.delete_response)
     def delete(self, req, id):
         """Destroys a server."""
         try:
@@ -1163,8 +1209,8 @@ class ServersController(wsgi.Controller):
     @validation.response_body_schema(schema.rebuild_response, '2.0', '2.8')
     @validation.response_body_schema(schema.rebuild_response_v29, '2.9', '2.18')  # noqa: E501
     @validation.response_body_schema(schema.rebuild_response_v219, '2.19', '2.25')  # noqa: E501
-    @validation.response_body_schema(schema.rebuild_response_v226, '2.26', '2.45')  # noqa: E501
-    @validation.response_body_schema(schema.rebuild_response_v246, '2.46', '2.53')  # noqa: E501
+    @validation.response_body_schema(schema.rebuild_response_v226, '2.26', '2.46')  # noqa: E501
+    @validation.response_body_schema(schema.rebuild_response_v247, '2.47', '2.53')  # noqa: E501
     @validation.response_body_schema(schema.rebuild_response_v254, '2.54', '2.56')  # noqa: E501
     @validation.response_body_schema(schema.rebuild_response_v257, '2.57', '2.62')  # noqa: E501
     @validation.response_body_schema(schema.rebuild_response_v263, '2.63', '2.70')  # noqa: E501

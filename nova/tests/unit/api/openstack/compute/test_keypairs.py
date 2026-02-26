@@ -303,19 +303,11 @@ class KeypairsTestV22(KeypairsTestV21):
             self):
         pass
 
-    def test_create_server_keypair_name_with_leading_trailing_compat_mode(
-            self):
-        pass
-
 
 class KeypairsTestV210(KeypairsTestV22):
     wsgi_api_version = '2.10'
 
     def test_keypair_create_with_name_leading_trailing_spaces_compat_mode(
-            self):
-        pass
-
-    def test_create_server_keypair_name_with_leading_trailing_compat_mode(
             self):
         pass
 

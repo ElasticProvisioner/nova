@@ -68,6 +68,13 @@ Related options:
         min=0,
         help='Timeout (seconds) to wait for node serial console state '
              'changed. Set to 0 to disable timeout.'),
+    cfg.IntOpt(
+        'vnc_console_state_timeout',
+        default=60,
+        min=0,
+        help='Timeout (seconds) to wait for node VNC console state '
+             'changed. Set to 0 to disable timeout (not recommended in '
+             'production environments).'),
     cfg.StrOpt(
         'conductor_group',
         deprecated_name='partition_key',
