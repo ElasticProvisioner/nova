@@ -35,7 +35,8 @@ class InstanceUsageAuditLogController(wsgi.Controller):
         self.host_api = compute.HostAPI()
 
     @wsgi.expected_errors(())
-    @validation.query_schema(schema.index_query)
+    @validation.query_schema(schema.index_query, '2.1', '2.101')
+    @validation.query_schema(schema.index_query_v2102, '2.102')
     @validation.response_body_schema(schema.index_response)
     def index(self, req):
         context = req.environ['nova.context']
@@ -44,7 +45,8 @@ class InstanceUsageAuditLogController(wsgi.Controller):
         return {'instance_usage_audit_logs': task_log}
 
     @wsgi.expected_errors(400)
-    @validation.query_schema(schema.show_query)
+    @validation.query_schema(schema.show_query, '2.1', '2.101')
+    @validation.query_schema(schema.show_query_v2102, '2.102')
     @validation.response_body_schema(schema.show_response)
     def show(self, req, id):
         context = req.environ['nova.context']

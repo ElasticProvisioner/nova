@@ -1,0 +1,27 @@
+{
+    "flavor": {
+        "OS-FLV-EXT-DATA:ephemeral": 0,
+        "description": "test description",
+        "disk": 20,
+        "extra_specs": {
+            "hw:cpu_policy": "shared",
+            "hw:numa_nodes": "1"
+        },
+        "id": "7",
+        "links": [
+            {
+                "href": "http://openstack.example.com/v2.1/6f70656e737461636b20342065766572/flavors/7",
+                "rel": "self"
+            },
+            {
+                "href": "http://openstack.example.com/6f70656e737461636b20342065766572/flavors/7",
+                "rel": "bookmark"
+            }
+        ],
+        "name": "m1.small.description",
+        "os-flavor-access:is_public": true,
+        "ram": 2048,
+        "swap": 0,
+        "vcpus": 1
+    }
+}

@@ -266,14 +266,18 @@ class VolumeAttachTestsV21(test.NoDBTestCase):
         self.stub_out(
             'nova.compute.api.API.attach_volume',
             lambda self, context, instance, volume_id, device, tag=None,
-            supports_multiattach=False, delete_on_termination=False: None)
+            supports_multiattach=False, delete_on_termination=False,
+            needs_device_returned=True: None)
         body = {
             'volumeAttachment': {
                 'volumeId': FAKE_UUID_A,
                 'device': '/dev/fake'}}
         result = self.controller.create(self.req, FAKE_UUID, body=body)
-        self.assertEqual('00000000-aaaa-aaaa-aaaa-000000000000',
-                         result['volumeAttachment']['id'])
+        if api_version_request.is_supported(self.req, '2.101'):
+            self.assertEqual("", result.text)
+        else:
+            self.assertEqual('00000000-aaaa-aaaa-aaaa-000000000000',
+                             result['volumeAttachment']['id'])
 
     @mock.patch.object(compute_api.API, 'attach_volume',
                        side_effect=exception.VolumeTaggedAttachNotSupported())
@@ -332,9 +336,13 @@ class VolumeAttachTestsV21(test.NoDBTestCase):
                 'volumeId': FAKE_UUID_A,
                 'device': None}}
         result = self.controller.create(self.req, FAKE_UUID, body=body)
-        self.assertEqual('00000000-aaaa-aaaa-aaaa-000000000000',
-                         result['volumeAttachment']['id'])
-        self.assertEqual('/dev/myfake', result['volumeAttachment']['device'])
+        if api_version_request.is_supported(self.req, '2.101'):
+            self.assertEqual("", result.text)
+        else:
+            self.assertEqual('00000000-aaaa-aaaa-aaaa-000000000000',
+                             result['volumeAttachment']['id'])
+            self.assertEqual('/dev/myfake',
+                             result['volumeAttachment']['device'])
 
     @mock.patch.object(compute_api.API, 'attach_volume',
                        side_effect=exception.InstanceIsLocked(
@@ -348,11 +356,14 @@ class VolumeAttachTestsV21(test.NoDBTestCase):
                           self.req, FAKE_UUID, body=body)
         supports_multiattach = api_version_request.is_supported(
             self.req, '2.60')
+        needs_device_returned = not api_version_request.is_supported(
+            self.req, '2.101')
         mock_attach_volume.assert_called_once_with(
             self.req.environ['nova.context'],
             test.MatchType(objects.Instance), FAKE_UUID_A, '/dev/fake',
             supports_multiattach=supports_multiattach,
-            delete_on_termination=False, tag=None)
+            delete_on_termination=False, tag=None,
+            needs_device_returned=needs_device_returned)
 
     def test_attach_volume_bad_id(self):
         self.stub_out(
@@ -772,7 +783,7 @@ class VolumeAttachTestsV279(VolumeAttachTestsV275):
         mock_attach_volume.assert_called_once_with(
             req.environ['nova.context'], test.MatchType(objects.Instance),
             FAKE_UUID_A, None, tag=None, supports_multiattach=True,
-            delete_on_termination=False)
+            delete_on_termination=False, needs_device_returned=True)
 
     @mock.patch('nova.compute.api.API.attach_volume', return_value=None)
     def test_attach_volume_with_delete_on_termination_default_value(
@@ -784,11 +795,16 @@ class VolumeAttachTestsV279(VolumeAttachTestsV275):
         body = {'volumeAttachment': {'volumeId': FAKE_UUID_A}}
         req = self._get_req(body)
         result = self.controller.create(req, FAKE_UUID, body=body)
-        self.assertFalse(result['volumeAttachment']['delete_on_termination'])
+        needs_device_returned = not api_version_request.is_supported(
+            self.req, '2.101')
+        if needs_device_returned:
+            self.assertFalse(
+                result['volumeAttachment']['delete_on_termination'])
         mock_attach_volume.assert_called_once_with(
             req.environ['nova.context'], test.MatchType(objects.Instance),
             FAKE_UUID_A, None, tag=None, supports_multiattach=True,
-            delete_on_termination=False)
+            delete_on_termination=False,
+            needs_device_returned=needs_device_returned)
 
     def test_create_volume_attach_invalid_delete_on_termination_empty(self):
         body = {'volumeAttachment': {'volumeId': FAKE_UUID_A,
@@ -824,11 +840,16 @@ class VolumeAttachTestsV279(VolumeAttachTestsV275):
                                      'delete_on_termination': True}}
         req = self._get_req(body)
         result = self.controller.create(req, FAKE_UUID, body=body)
-        self.assertTrue(result['volumeAttachment']['delete_on_termination'])
+        needs_device_returned = not api_version_request.is_supported(
+            self.req, '2.101')
+        if needs_device_returned:
+            self.assertTrue(
+                result['volumeAttachment']['delete_on_termination'])
         mock_attach_volume.assert_called_once_with(
             req.environ['nova.context'], test.MatchType(objects.Instance),
             FAKE_UUID_A, None, tag=None, supports_multiattach=True,
-            delete_on_termination=True)
+            delete_on_termination=True,
+            needs_device_returned=needs_device_returned)
 
     def test_show_pre_v279(self):
         """Before microversion 2.79, show a detail of a volume attachment
@@ -1316,6 +1337,26 @@ class VolumeAttachTestsV289(VolumeAttachTestsV285):
             uuids.bdm,
             result['volumeAttachments'][0]['bdm_uuid']
         )
+
+
+class VolumeAttachTestsV2101(VolumeAttachTestsV289):
+    microversion = '2.101'
+
+    def setUp(self):
+        super().setUp()
+        self.controller = volume_attachments.VolumeAttachmentController()
+
+    @mock.patch('nova.compute.api.API.attach_volume', return_value=None)
+    def test_atttach_volume_v2101(self, mock_attach_volume):
+        body = {'volumeAttachment': {'volumeId': FAKE_UUID_A}}
+        req = self._get_req(body)
+        result = self.controller.create(req, FAKE_UUID, body=body)
+        self.assertEqual(202, result.status_int)
+        self.assertEqual("", result.text)
+        mock_attach_volume.assert_called_once_with(
+            req.environ['nova.context'], test.MatchType(objects.Instance),
+            FAKE_UUID_A, None, tag=None, supports_multiattach=True,
+            delete_on_termination=False, needs_device_returned=False)
 
 
 class SwapVolumeMultiattachTestCase(test.NoDBTestCase):

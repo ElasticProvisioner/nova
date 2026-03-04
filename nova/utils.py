@@ -1676,3 +1676,35 @@ class StaticallyDelayingCancellableTaskExecutorWrapper:
     @property
     def is_alive(self) -> bool:
         return self._thread.is_alive()
+
+
+LONG_TASK_EXECUTOR: Executor | None = None
+
+
+def get_long_task_executor(max_workers) -> Executor:
+    """Returns the executor used for long compute operations."""
+    global LONG_TASK_EXECUTOR
+
+    if not LONG_TASK_EXECUTOR:
+        LONG_TASK_EXECUTOR = create_executor(max_workers)
+
+        pname = multiprocessing.current_process().name
+        executor_name = f"{pname}.long_task"
+        LONG_TASK_EXECUTOR.name = executor_name
+
+        LOG.info("The long task thread pool %s is initialized",
+                 executor_name)
+
+    return LONG_TASK_EXECUTOR
+
+
+def destroy_long_task_executor():
+    """Closes the executor and resets the global to None"""
+    global LONG_TASK_EXECUTOR
+    if LONG_TASK_EXECUTOR:
+        LOG.info(
+            "The thread pool %s is shutting down", LONG_TASK_EXECUTOR.name)
+        LONG_TASK_EXECUTOR.shutdown()
+        LOG.info("The thread pool %s is closed", LONG_TASK_EXECUTOR.name)
+
+    LONG_TASK_EXECUTOR = None

@@ -159,3 +159,22 @@ class VolumeAttachmentsSampleV289(VolumeAttachmentsSampleV285):
     """
     microversion = '2.89'
     scenarios = [('v2_89', {'api_major_version': 'v2.1'})]
+
+
+class VolumeAttachmentsSampleV2101(VolumeAttachmentsSampleV289):
+    """Microversion 2.101 removes the body when creating an attachment"""
+    microversion = '2.101'
+    scenarios = [('v2_101', {'api_major_version': 'v2.1'})]
+
+    def test_attach_volume_to_server(self):
+        subs = {
+            'volume_id': self.OLD_VOLUME_ID,
+            'device': '/dev/sdb'
+        }
+        subs = self._get_vol_attachment_subs(subs)
+        response = self._do_post(
+            'servers/%s/os-volume_attachments' % self.server_id,
+            'attach-volume-to-server-req', subs)
+        self.assertEqual(202, response.status_code)
+        self.assertEqual("", response.text)
+        return subs

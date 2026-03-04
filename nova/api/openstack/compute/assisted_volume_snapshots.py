@@ -65,7 +65,7 @@ class AssistedVolumeSnapshotsController(wsgi.Controller):
     @wsgi.response(204)
     @wsgi.expected_errors((400, 404))
     @validation.query_schema(schema.delete_query, '2.0', '2.74')
-    @validation.query_schema(schema.delete_query_275, '2.75')
+    @validation.query_schema(schema.delete_query_v275, '2.75')
     @validation.response_body_schema(schema.delete_response)
     def delete(self, req, id):
         """Delete a snapshot."""

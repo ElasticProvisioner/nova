@@ -461,6 +461,12 @@ class TestCase(base.BaseTestCase):
         if host is not None:
             # Make sure that CONF.host is relevant to the right hostname
             self.useFixture(nova_fixtures.ConfPatcher(host=host))
+        # By default, service creates a RPC server for auto populated
+        # 'topic' from service binary name. For compute service, we need
+        # to create the 2nd RPC server which will be done by pass the
+        # 'topic_alt' explicitly.
+        if name == 'compute' and 'topic_alt' not in kwargs:
+            kwargs['topic_alt'] = compute_rpcapi.RPC_TOPIC_ALT
 
         if name == 'compute' and self.USES_DB:
             # NOTE(danms): We need to create the HostMapping first, because

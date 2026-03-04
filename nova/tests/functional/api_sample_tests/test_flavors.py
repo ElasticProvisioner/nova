@@ -82,12 +82,12 @@ class FlavorsSampleJsonTest(api_sample_base.ApiSampleTestBaseV21):
         self.assertEqual(400, response.status_code)
 
 
-class FlavorsSampleJsonTest2_55(FlavorsSampleJsonTest):
+class FlavorsSampleJsonTest255(FlavorsSampleJsonTest):
     microversion = '2.55'
     scenarios = [('v2_55', {'api_major_version': 'v2.1'})]
 
     def setUp(self):
-        super(FlavorsSampleJsonTest2_55, self).setUp()
+        super().setUp()
         # Get the existing flavors created by DefaultFlavorsFixture.
         ctxt = nova_context.get_admin_context()
         flavors = objects.FlavorList.get_all(ctxt)
@@ -104,12 +104,12 @@ class FlavorsSampleJsonTest2_55(FlavorsSampleJsonTest):
         self.subs = {'flavorid': new_flavor_id}
 
 
-class FlavorsSampleJsonTest2_61(FlavorsSampleJsonTest):
+class FlavorsSampleJsonTest261(FlavorsSampleJsonTest):
     microversion = '2.61'
     scenarios = [('v2_61', {'api_major_version': 'v2.1'})]
 
     def setUp(self):
-        super(FlavorsSampleJsonTest2_61, self).setUp()
+        super().setUp()
         # Get the existing flavors created by DefaultFlavorsFixture.
         ctxt = nova_context.get_admin_context()
         flavors = objects.FlavorList.get_all(ctxt)
@@ -130,9 +130,17 @@ class FlavorsSampleJsonTest2_61(FlavorsSampleJsonTest):
         self.subs = {'flavorid': new_flavor_id}
 
 
-class FlavorsSampleJsonTest2_75(FlavorsSampleJsonTest2_61):
+class FlavorsSampleJsonTest275(FlavorsSampleJsonTest261):
     microversion = '2.75'
     scenarios = [('v2_75', {'api_major_version': 'v2.1'})]
 
     def test_flavors_list(self):
         pass
+
+
+class FlavorsSampleJsonTest2102(FlavorsSampleJsonTest261):
+    microversion = '2.102'
+    scenarios = [('v2_102', {'api_major_version': 'v2.1'})]
+
+    sort_keys = FlavorsSampleJsonTest.sort_keys
+    sort_keys.remove('rxtx_factor')

@@ -619,7 +619,7 @@ VALID_SORT_KEYS_V275['enum'] = list(
     set(VALID_SORT_KEYS_V273["enum"]) - set(SERVER_LIST_IGNORE_SORT_KEY_V273)
 )
 
-query_params_v21 = {
+index_query = {
     'type': 'object',
     'properties': {
         'user_id': parameter_types.common_query_param,
@@ -692,44 +692,47 @@ query_params_v21 = {
 # Update the joined-table fields to the list so it will not be
 # stripped in later process, thus can be handled later in api
 # to raise HTTP 400.
-query_params_v21['properties'].update(
+index_query['properties'].update(
     JOINED_TABLE_QUERY_PARAMS_SERVERS)
 
-query_params_v21['properties'].update(
+index_query['properties'].update(
     parameter_types.pagination_parameters)
 
-query_params_v226 = copy.deepcopy(query_params_v21)
-query_params_v226['properties'].update({
+index_query_v226 = copy.deepcopy(index_query)
+index_query_v226['properties'].update({
     'tags': parameter_types.common_query_regex_param,
     'tags-any': parameter_types.common_query_regex_param,
     'not-tags': parameter_types.common_query_regex_param,
     'not-tags-any': parameter_types.common_query_regex_param,
 })
 
-query_params_v266 = copy.deepcopy(query_params_v226)
-query_params_v266['properties'].update({
+index_query_v266 = copy.deepcopy(index_query_v226)
+index_query_v266['properties'].update({
     'changes-before': parameter_types.multi_params(
         {'type': 'string', 'format': 'date-time'}
     ),
 })
 
-query_params_v273 = copy.deepcopy(query_params_v266)
-query_params_v273['properties'].update({
+index_query_v273 = copy.deepcopy(index_query_v266)
+index_query_v273['properties'].update({
     'sort_key': parameter_types.multi_params(VALID_SORT_KEYS_V273),
     'locked': parameter_types.common_query_param,
 })
 
-query_params_v275 = copy.deepcopy(query_params_v273)
-query_params_v275['properties'].update({
+index_query_v275 = copy.deepcopy(index_query_v273)
+index_query_v275['properties'].update({
     'sort_key': parameter_types.multi_params(VALID_SORT_KEYS_V275),
 })
-query_params_v275['additionalProperties'] = False
+index_query_v275['additionalProperties'] = False
 
 show_query = {
     'type': 'object',
     'properties': {},
     'additionalProperties': True,
 }
+
+show_query_v2102 = copy.deepcopy(show_query)
+show_query_v2102['additionalProperties'] = False
 
 _server_status = {
     'type': 'string',
@@ -906,7 +909,7 @@ _server_response = {
         'addresses': {
             'type': 'object',
             'patternProperties': {
-                '^.+$': {
+                '^.*$': {
                     'type': 'array',
                     'items': {
                         'type': 'object',
@@ -941,7 +944,6 @@ _server_response = {
             },
             'additionalProperties': False,
         },
-        'adminPass': {'type': ['null', 'string']},
         'config_drive': {
             'type': ['string', 'null'], 'enum': ['', 'True', 'False', None],
         },
@@ -1480,7 +1482,6 @@ update_response = {
                     },
                     'additionalProperties': False,
                 },
-                'adminPass': {'type': ['null', 'string']},
                 'created': {'type': 'string', 'format': 'date-time'},
                 'fault': {
                     'type': 'object',
@@ -1884,6 +1885,8 @@ rebuild_response = {
                 'OS-DCF:diskConfig': {'type': 'string'},
             },
             'required': [
+                # adminPass is an unfortunate example of config-driven
+                # API behavior and isn't present unless enabled
                 'accessIPv4',
                 'accessIPv6',
                 'addresses',

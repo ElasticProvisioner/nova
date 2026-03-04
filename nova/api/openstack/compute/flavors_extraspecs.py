@@ -55,7 +55,8 @@ class FlavorExtraSpecsController(wsgi.Controller):
                 validators.validate(name, value)
 
     @wsgi.expected_errors(404)
-    @validation.query_schema(schema.index_query)
+    @validation.query_schema(schema.index_query, '2.1', '2.101')
+    @validation.query_schema(schema.index_query_v2102, '2.102')
     @validation.response_body_schema(schema.index_response)
     def index(self, req, flavor_id):
         """Returns the list of extra specs for a given flavor."""
@@ -108,7 +109,8 @@ class FlavorExtraSpecsController(wsgi.Controller):
         return body
 
     @wsgi.expected_errors(404)
-    @validation.query_schema(schema.show_query)
+    @validation.query_schema(schema.show_query, '2.1', '2.101')
+    @validation.query_schema(schema.show_query_v2102, '2.102')
     @validation.response_body_schema(schema.show_response)
     def show(self, req, flavor_id, id):
         """Return a single extra spec item."""

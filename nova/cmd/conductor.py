@@ -49,5 +49,6 @@ def main():
     workers = CONF.conductor.workers or processutils.get_worker_count()
 
     utils.destroy_default_executor()
+    utils.destroy_scatter_gather_executor()
     service.serve(server, workers=workers)
     service.wait()

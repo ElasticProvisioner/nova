@@ -143,6 +143,7 @@ log management and live migration of instances.
 
    manage-the-cloud
    services
+   graceful-shutdown
    service-groups
    manage-logs
    root-wrap-reference

@@ -856,7 +856,8 @@ EXTENSION_LIST_LEGACY_V2_COMPATIBLE = sorted(
 class ExtensionInfoController(wsgi.Controller):
 
     @wsgi.expected_errors(())
-    @validation.query_schema(schema.index_query)
+    @validation.query_schema(schema.index_query, '2.1', '2.101')
+    @validation.query_schema(schema.index_query_v2102, '2.102')
     @validation.response_body_schema(schema.index_response)
     def index(self, req):
         context = req.environ['nova.context']
@@ -870,7 +871,8 @@ class ExtensionInfoController(wsgi.Controller):
         return dict(extensions=EXTENSION_LIST)
 
     @wsgi.expected_errors(404)
-    @validation.query_schema(schema.show_query)
+    @validation.query_schema(schema.show_query, '2.1', '2.101')
+    @validation.query_schema(schema.show_query_v2102, '2.102')
     @validation.response_body_schema(schema.show_response)
     def show(self, req, id):
         context = req.environ['nova.context']

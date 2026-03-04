@@ -1144,7 +1144,7 @@ class Host(object):
     def find_secret(self, usage_type, usage_id):
         """Find a secret.
 
-        usage_type: one of 'iscsi', 'ceph', 'rbd' or 'volume'
+        usage_type: one of 'iscsi', 'ceph', 'rbd', 'volume' or 'vtpm'
         usage_id: name of resource in secret
         """
         if usage_type == 'iscsi':

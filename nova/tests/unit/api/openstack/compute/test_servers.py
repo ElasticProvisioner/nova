@@ -2930,7 +2930,7 @@ class ServersControllerStartStopTest(ControllerTest):
     def test_start(self, mock_start):
         req = fakes.HTTPRequestV21.blank(self.path_action % FAKE_UUID)
         body = {'os-start': None}
-        self.controller._start_server(req, FAKE_UUID, body=body)
+        self.controller._start(req, FAKE_UUID, body=body)
         mock_start.assert_called_once_with(mock.ANY, mock.ANY)
 
     @mock.patch.object(compute_api.API, 'start')
@@ -2941,7 +2941,7 @@ class ServersControllerStartStopTest(ControllerTest):
         req = fakes.HTTPRequestV21.blank(self.path_action % FAKE_UUID)
         body = {'os-start': None}
         self.assertRaises(webob.exc.HTTPConflict,
-            self.controller._start_server, req, FAKE_UUID, body=body)
+            self.controller._start, req, FAKE_UUID, body=body)
 
     @mock.patch.object(
         compute_api.API, 'start', fakes.fake_actions_to_locked_server)
@@ -2949,7 +2949,7 @@ class ServersControllerStartStopTest(ControllerTest):
         req = fakes.HTTPRequestV21.blank(self.path_action % FAKE_UUID)
         body = {'os-start': None}
         self.assertRaises(webob.exc.HTTPConflict,
-            self.controller._start_server, req, FAKE_UUID, body=body)
+            self.controller._start, req, FAKE_UUID, body=body)
 
     @mock.patch.object(compute_api.API, 'start')
     def test_start_invalid(self, mock_start):
@@ -2960,13 +2960,13 @@ class ServersControllerStartStopTest(ControllerTest):
         req = fakes.HTTPRequestV21.blank(self.path_action % FAKE_UUID)
         body = {'os-start': None}
         self.assertRaises(webob.exc.HTTPConflict,
-            self.controller._start_server, req, FAKE_UUID, body=body)
+            self.controller._start, req, FAKE_UUID, body=body)
 
     @mock.patch.object(compute_api.API, 'stop')
     def test_stop(self, mock_stop):
         req = fakes.HTTPRequestV21.blank(self.path_action % FAKE_UUID)
         body = {'os-stop': None}
-        self.controller._stop_server(req, FAKE_UUID, body=body)
+        self.controller._stop(req, FAKE_UUID, body=body)
         mock_stop.assert_called_once_with(mock.ANY, mock.ANY)
 
     @mock.patch.object(compute_api.API, 'stop')
@@ -2977,7 +2977,7 @@ class ServersControllerStartStopTest(ControllerTest):
         req = fakes.HTTPRequestV21.blank(self.path_action % FAKE_UUID)
         body = {'os-stop': None}
         self.assertRaises(webob.exc.HTTPConflict,
-            self.controller._stop_server, req, FAKE_UUID, body=body)
+            self.controller._stop, req, FAKE_UUID, body=body)
 
     @mock.patch.object(
         compute_api.API, 'stop', fakes.fake_actions_to_locked_server)
@@ -2985,7 +2985,7 @@ class ServersControllerStartStopTest(ControllerTest):
         req = fakes.HTTPRequestV21.blank(self.path_action % FAKE_UUID)
         body = {'os-stop': None}
         self.assertRaises(webob.exc.HTTPConflict,
-            self.controller._stop_server, req, FAKE_UUID, body=body)
+            self.controller._stop, req, FAKE_UUID, body=body)
 
     @mock.patch.object(compute_api.API, 'stop')
     def test_stop_invalid_state(self, mock_stop):
@@ -2996,7 +2996,7 @@ class ServersControllerStartStopTest(ControllerTest):
         req = fakes.HTTPRequestV21.blank(self.path_action % FAKE_UUID)
         body = {'os-stop': None}
         self.assertRaises(webob.exc.HTTPConflict,
-            self.controller._stop_server, req, FAKE_UUID, body=body)
+            self.controller._stop, req, FAKE_UUID, body=body)
 
     @mock.patch('nova.db.main.api.instance_get_by_uuid')
     def test_start_with_bogus_id(self, mock_get):
@@ -3005,7 +3005,7 @@ class ServersControllerStartStopTest(ControllerTest):
         req = fakes.HTTPRequestV21.blank(self.path_action % 'test_inst')
         body = {'os-start': None}
         self.assertRaises(webob.exc.HTTPNotFound,
-            self.controller._start_server, req, 'test_inst', body=body)
+            self.controller._start, req, 'test_inst', body=body)
 
     @mock.patch('nova.db.main.api.instance_get_by_uuid')
     def test_stop_with_bogus_id(self, mock_get):
@@ -3014,7 +3014,7 @@ class ServersControllerStartStopTest(ControllerTest):
         req = fakes.HTTPRequestV21.blank(self.path_action % 'test_inst')
         body = {'os-stop': None}
         self.assertRaises(webob.exc.HTTPNotFound,
-            self.controller._stop_server, req, 'test_inst', body=body)
+            self.controller._stop, req, 'test_inst', body=body)
 
 
 class _ServersControllerRebuildTest(ControllerTest):
@@ -3061,7 +3061,7 @@ class ServersControllerRebuildTest(_ServersControllerRebuildTest):
     def test_rebuild_server_with_image_not_uuid(self):
         self.body['rebuild']['imageRef'] = 'not-uuid'
         self.assertRaises(exception.ValidationError,
-                          self.controller._action_rebuild,
+                          self.controller._rebuild,
                           self.req, FAKE_UUID,
                           body=self.body)
 
@@ -3071,27 +3071,27 @@ class ServersControllerRebuildTest(_ServersControllerRebuildTest):
             '76fa36fc-c930-4bf3-8c8a-ea2a2420deb6')
         self.body['rebuild']['imageRef'] = image_href
         self.assertRaises(exception.ValidationError,
-                          self.controller._action_rebuild,
+                          self.controller._rebuild,
                           self.req, FAKE_UUID,
                           body=self.body)
 
     def test_rebuild_server_with_image_as_empty_string(self):
         self.body['rebuild']['imageRef'] = ''
         self.assertRaises(exception.ValidationError,
-                          self.controller._action_rebuild,
+                          self.controller._rebuild,
                           self.req, FAKE_UUID,
                           body=self.body)
 
     def test_rebuild_instance_name_with_spaces_in_the_middle(self):
         self.body['rebuild']['name'] = 'abc   def'
         self.req.body = jsonutils.dump_as_bytes(self.body)
-        self.controller._action_rebuild(self.req, FAKE_UUID, body=self.body)
+        self.controller._rebuild(self.req, FAKE_UUID, body=self.body)
 
     def test_rebuild_instance_name_with_leading_trailing_spaces(self):
         self.body['rebuild']['name'] = '  abc   def  '
         self.req.body = jsonutils.dump_as_bytes(self.body)
         self.assertRaises(exception.ValidationError,
-                          self.controller._action_rebuild,
+                          self.controller._rebuild,
                           self.req, FAKE_UUID, body=self.body)
 
     def test_rebuild_instance_name_with_leading_trailing_spaces_compat_mode(
@@ -3105,14 +3105,13 @@ class ServersControllerRebuildTest(_ServersControllerRebuildTest):
 
         with mock.patch.object(compute_api.API, 'rebuild') as mock_rebuild:
             mock_rebuild.side_effect = fake_rebuild
-            self.controller._action_rebuild(self.req, FAKE_UUID,
-                                            body=self.body)
+            self.controller._rebuild(self.req, FAKE_UUID, body=self.body)
 
     def test_rebuild_instance_with_blank_metadata_key(self):
         self.body['rebuild']['metadata'][''] = 'world'
         self.req.body = jsonutils.dump_as_bytes(self.body)
         self.assertRaises(exception.ValidationError,
-                          self.controller._action_rebuild,
+                          self.controller._rebuild,
                           self.req, FAKE_UUID, body=self.body)
 
     def test_rebuild_instance_with_metadata_key_too_long(self):
@@ -3120,7 +3119,7 @@ class ServersControllerRebuildTest(_ServersControllerRebuildTest):
 
         self.req.body = jsonutils.dump_as_bytes(self.body)
         self.assertRaises(exception.ValidationError,
-                          self.controller._action_rebuild,
+                          self.controller._rebuild,
                           self.req, FAKE_UUID, body=self.body)
 
     def test_rebuild_instance_with_metadata_value_too_long(self):
@@ -3128,7 +3127,7 @@ class ServersControllerRebuildTest(_ServersControllerRebuildTest):
 
         self.req.body = jsonutils.dump_as_bytes(self.body)
         self.assertRaises(exception.ValidationError,
-                          self.controller._action_rebuild, self.req,
+                          self.controller._rebuild, self.req,
                           FAKE_UUID, body=self.body)
 
     def test_rebuild_instance_with_metadata_value_not_string(self):
@@ -3136,7 +3135,7 @@ class ServersControllerRebuildTest(_ServersControllerRebuildTest):
 
         self.req.body = jsonutils.dump_as_bytes(self.body)
         self.assertRaises(exception.ValidationError,
-                          self.controller._action_rebuild, self.req,
+                          self.controller._rebuild, self.req,
                           FAKE_UUID, body=self.body)
 
     @mock.patch.object(nova_fixtures.GlanceFixture, 'show',
@@ -3149,7 +3148,7 @@ class ServersControllerRebuildTest(_ServersControllerRebuildTest):
         # make min_ram larger than our instance ram size
         self.req.body = jsonutils.dump_as_bytes(self.body)
         self.assertRaises(webob.exc.HTTPBadRequest,
-                          self.controller._action_rebuild,
+                          self.controller._rebuild,
                           self.req, FAKE_UUID, body=self.body)
         mock_show.assert_called_once_with(
             self.req.environ['nova.context'], self.image_uuid,
@@ -3165,7 +3164,7 @@ class ServersControllerRebuildTest(_ServersControllerRebuildTest):
         # make min_disk larger than our instance disk size
         self.req.body = jsonutils.dump_as_bytes(self.body)
         self.assertRaises(webob.exc.HTTPBadRequest,
-                          self.controller._action_rebuild, self.req,
+                          self.controller._rebuild, self.req,
                           FAKE_UUID, body=self.body)
         mock_show.assert_called_once_with(
             self.req.environ['nova.context'], self.image_uuid,
@@ -3180,7 +3179,7 @@ class ServersControllerRebuildTest(_ServersControllerRebuildTest):
         # make image size larger than our instance disk size
         self.req.body = jsonutils.dump_as_bytes(self.body)
         self.assertRaises(webob.exc.HTTPBadRequest,
-                          self.controller._action_rebuild,
+                          self.controller._rebuild,
                           self.req, FAKE_UUID, body=self.body)
         mock_show.assert_called_once_with(
             self.req.environ['nova.context'], self.image_uuid,
@@ -3190,7 +3189,7 @@ class ServersControllerRebuildTest(_ServersControllerRebuildTest):
         self.body['rebuild']['name'] = '     '
         self.req.body = jsonutils.dump_as_bytes(self.body)
         self.assertRaises(exception.ValidationError,
-                          self.controller._action_rebuild,
+                          self.controller._rebuild,
                           self.req, FAKE_UUID, body=self.body)
 
     @mock.patch.object(nova_fixtures.GlanceFixture, 'show',
@@ -3201,7 +3200,7 @@ class ServersControllerRebuildTest(_ServersControllerRebuildTest):
     def test_rebuild_instance_with_deleted_image(self, mock_show):
         self.req.body = jsonutils.dump_as_bytes(self.body)
         self.assertRaises(webob.exc.HTTPBadRequest,
-                          self.controller._action_rebuild,
+                          self.controller._rebuild,
                           self.req, FAKE_UUID, body=self.body)
         mock_show.assert_called_once_with(
             self.req.environ['nova.context'], self.image_uuid,
@@ -3222,7 +3221,7 @@ class ServersControllerRebuildTest(_ServersControllerRebuildTest):
         ):
             self.req.body = jsonutils.dump_as_bytes(self.body)
             self.assertRaises(webob.exc.HTTPForbidden,
-                              self.controller._action_rebuild,
+                              self.controller._rebuild,
                               self.req, FAKE_UUID, body=self.body)
 
     def test_rebuild_bad_personality(self):
@@ -3241,7 +3240,7 @@ class ServersControllerRebuildTest(_ServersControllerRebuildTest):
         }
 
         self.assertRaises(exception.ValidationError,
-                          self.controller._action_rebuild,
+                          self.controller._rebuild,
                           self.req, FAKE_UUID, body=body)
 
     def test_rebuild_personality(self):
@@ -3259,8 +3258,7 @@ class ServersControllerRebuildTest(_ServersControllerRebuildTest):
             },
         }
 
-        body = self.controller._action_rebuild(self.req, FAKE_UUID,
-                                               body=body).obj
+        body = self.controller._rebuild(self.req, FAKE_UUID, body=body).obj
 
         self.assertNotIn('personality', body['server'])
 
@@ -3277,8 +3275,7 @@ class ServersControllerRebuildTest(_ServersControllerRebuildTest):
             },
         }
 
-        body = self.controller._action_rebuild(self.req, FAKE_UUID,
-                                               body=body).obj
+        body = self.controller._rebuild(self.req, FAKE_UUID, body=body).obj
         get_only_fields = copy.deepcopy(GET_ONLY_FIELDS)
         for field in get_only_fields:
             self.assertNotIn(field, body['server'])
@@ -3303,7 +3300,7 @@ class ServersControllerRebuildTestV254(_ServersControllerRebuildTest):
         if set_key_name:
             self.body['rebuild']['key_name'] = key_name
         self.req.body = jsonutils.dump_as_bytes(self.body)
-        server = self.controller._action_rebuild(
+        server = self.controller._rebuild(
             self.req, FAKE_UUID,
             body=self.body).obj['server']
         self.assertEqual(server['id'], FAKE_UUID)
@@ -3325,7 +3322,7 @@ class ServersControllerRebuildTestV254(_ServersControllerRebuildTest):
             },
         }
         excpt = self.assertRaises(exception.ValidationError,
-                                  self.controller._action_rebuild,
+                                  self.controller._rebuild,
                                   self.req, FAKE_UUID, body=body)
         self.assertIn('key_name', str(excpt))
 
@@ -3337,7 +3334,7 @@ class ServersControllerRebuildTestV254(_ServersControllerRebuildTest):
             },
         }
         self.assertRaises(webob.exc.HTTPBadRequest,
-                          self.controller._action_rebuild,
+                          self.controller._rebuild,
                           self.req, FAKE_UUID, body=body)
 
     def test_rebuild_user_has_no_key_pair(self):
@@ -3351,7 +3348,7 @@ class ServersControllerRebuildTestV254(_ServersControllerRebuildTest):
         self.mock_get.side_effect = fake_get
         self.body['rebuild']['key_name'] = "a-key-name"
         self.assertRaises(webob.exc.HTTPBadRequest,
-                          self.controller._action_rebuild,
+                          self.controller._rebuild,
                           self.req, FAKE_UUID, body=self.body)
 
     def test_rebuild_with_non_string_keypair_name(self):
@@ -3362,7 +3359,7 @@ class ServersControllerRebuildTestV254(_ServersControllerRebuildTest):
             },
         }
         self.assertRaises(exception.ValidationError,
-                          self.controller._action_rebuild,
+                          self.controller._rebuild,
                           self.req, FAKE_UUID, body=body)
 
     def test_rebuild_with_invalid_keypair_name(self):
@@ -3373,7 +3370,7 @@ class ServersControllerRebuildTestV254(_ServersControllerRebuildTest):
             },
         }
         self.assertRaises(webob.exc.HTTPBadRequest,
-                          self.controller._action_rebuild,
+                          self.controller._rebuild,
                           self.req, FAKE_UUID, body=body)
 
     def test_rebuild_with_empty_keypair_name(self):
@@ -3384,7 +3381,7 @@ class ServersControllerRebuildTestV254(_ServersControllerRebuildTest):
             },
         }
         self.assertRaises(exception.ValidationError,
-                          self.controller._action_rebuild,
+                          self.controller._rebuild,
                           self.req, FAKE_UUID, body=body)
 
     def test_rebuild_with_none_keypair_name(self):
@@ -3397,7 +3394,7 @@ class ServersControllerRebuildTestV254(_ServersControllerRebuildTest):
         with mock.patch.object(objects.KeyPair, 'get_by_name') as key_get:
             self.body['rebuild']['key_name'] = key_name
             self.req.body = jsonutils.dump_as_bytes(self.body)
-            self.controller._action_rebuild(
+            self.controller._rebuild(
                 self.req, FAKE_UUID,
                 body=self.body)
             # NOTE: because the api will call _get_server twice. The server
@@ -3413,7 +3410,7 @@ class ServersControllerRebuildTestV254(_ServersControllerRebuildTest):
             },
         }
         self.assertRaises(exception.ValidationError,
-                          self.controller._action_rebuild,
+                          self.controller._rebuild,
                           self.req, FAKE_UUID, body=body)
 
 
@@ -3439,7 +3436,7 @@ class ServersControllerRebuildTestV257(_ServersControllerRebuildTest):
             }
         }
         ex = self.assertRaises(exception.ValidationError,
-                               self.controller._action_rebuild,
+                               self.controller._rebuild,
                                self.req, FAKE_UUID, body=body)
         self.assertIn('personality', str(ex))
 
@@ -3454,7 +3451,7 @@ class ServersControllerRebuildTestV257(_ServersControllerRebuildTest):
         self.req.api_version_request = \
             api_version_request.APIVersionRequest('2.55')
         ex = self.assertRaises(exception.ValidationError,
-                               self.controller._action_rebuild,
+                               self.controller._rebuild,
                                self.req, FAKE_UUID, body=body)
         self.assertIn('user_data', str(ex))
 
@@ -3467,7 +3464,7 @@ class ServersControllerRebuildTestV257(_ServersControllerRebuildTest):
             }
         }
         ex = self.assertRaises(exception.ValidationError,
-                               self.controller._action_rebuild,
+                               self.controller._rebuild,
                                self.req, FAKE_UUID, body=body)
         self.assertIn('user_data', str(ex))
 
@@ -3480,7 +3477,7 @@ class ServersControllerRebuildTestV257(_ServersControllerRebuildTest):
             }
         }
         ex = self.assertRaises(exception.ValidationError,
-                               self.controller._action_rebuild,
+                               self.controller._rebuild,
                                self.req, FAKE_UUID, body=body)
         self.assertIn('user_data', str(ex))
 
@@ -3512,7 +3509,7 @@ class ServersControllerRebuildTestV257(_ServersControllerRebuildTest):
             return instance_update_and_get_original(
                 ctxt, instance_uuid, values, **kwargs)
         mock_update.side_effect = fake_instance_update_and_get_original
-        self.controller._action_rebuild(self.req, FAKE_UUID, body=body)
+        self.controller._rebuild(self.req, FAKE_UUID, body=body)
         self.assertEqual(2, mock_update.call_count)
 
 
@@ -3533,8 +3530,8 @@ class ServersControllerRebuildTestV219(_ServersControllerRebuildTest):
         if set_desc:
             self.body['rebuild']['description'] = desc
         self.req.body = jsonutils.dump_as_bytes(self.body)
-        server = self.controller._action_rebuild(self.req, FAKE_UUID,
-                                                 body=self.body).obj['server']
+        server = self.controller._rebuild(
+            self.req, FAKE_UUID, body=self.body).obj['server']
         self.assertEqual(server['id'], FAKE_UUID)
         self.assertEqual(server['description'], desc)
 
@@ -3554,7 +3551,7 @@ class ServersControllerRebuildTestV219(_ServersControllerRebuildTest):
         self.body['rebuild']['description'] = 'x' * 256
         self.req.body = jsonutils.dump_as_bytes(self.body)
         self.assertRaises(exception.ValidationError,
-                          self.controller._action_rebuild,
+                          self.controller._rebuild,
                           self.req, FAKE_UUID, body=self.body)
 
     def test_rebuild_server_description_invalid(self):
@@ -3562,7 +3559,7 @@ class ServersControllerRebuildTestV219(_ServersControllerRebuildTest):
         self.body['rebuild']['description'] = "123\0d456"
         self.req.body = jsonutils.dump_as_bytes(self.body)
         self.assertRaises(exception.ValidationError,
-                          self.controller._action_rebuild,
+                          self.controller._rebuild,
                           self.req, FAKE_UUID, body=self.body)
 
 
@@ -3607,12 +3604,12 @@ class ServersControllerRebuildTestV263(ControllerTest):
 
         self.body['rebuild']['trusted_image_certificates'] = certs
         self.req.body = jsonutils.dump_as_bytes(self.body)
-        server = self.controller._action_rebuild(
+        server = self.controller._rebuild(
             self.req, FAKE_UUID, body=self.body).obj['server']
 
         # TODO(stephenfin): This is a lie. We call '_get_server' immediately
         # after making the call to 'nova.compute.api.API().rebuild_server' in
-        # '_action_rebuild', which means all we're testing here is the value
+        # '_rebuild', which means all we're testing here is the value
         # returned by 'mock_get' above. Drop it in favour of testing the calls
         # to the API itself
         if certs:
@@ -3658,7 +3655,7 @@ class ServersControllerRebuildTestV263(ControllerTest):
         self.body['rebuild']['trusted_image_certificates'] = ['']
         self.req.body = jsonutils.dump_as_bytes(self.body)
         ex = self.assertRaises(exception.ValidationError,
-                               self.controller._action_rebuild,
+                               self.controller._rebuild,
                                self.req, FAKE_UUID, body=self.body)
         self.assertRegex(
             str(ex),
@@ -3670,7 +3667,7 @@ class ServersControllerRebuildTestV263(ControllerTest):
         self.body['rebuild']['trusted_image_certificates'] = []
         self.req.body = jsonutils.dump_as_bytes(self.body)
         ex = self.assertRaises(exception.ValidationError,
-                               self.controller._action_rebuild,
+                               self.controller._rebuild,
                                self.req, FAKE_UUID, body=self.body)
         self.assertRegex(
             str(ex),
@@ -3683,7 +3680,7 @@ class ServersControllerRebuildTestV263(ControllerTest):
             'cert{}'.format(i) for i in range(51)]
         self.req.body = jsonutils.dump_as_bytes(self.body)
         ex = self.assertRaises(exception.ValidationError,
-                               self.controller._action_rebuild,
+                               self.controller._rebuild,
                                self.req, FAKE_UUID, body=self.body)
         self.assertIn('is too long', str(ex))
 
@@ -3692,7 +3689,7 @@ class ServersControllerRebuildTestV263(ControllerTest):
         self.body['rebuild']['trusted_image_certificates'] = ['cert', 'cert']
         self.req.body = jsonutils.dump_as_bytes(self.body)
         ex = self.assertRaises(exception.ValidationError,
-                               self.controller._action_rebuild,
+                               self.controller._rebuild,
                                self.req, FAKE_UUID, body=self.body)
         self.assertIn('has non-unique elements', str(ex))
 
@@ -3701,7 +3698,7 @@ class ServersControllerRebuildTestV263(ControllerTest):
         self.body['rebuild']['trusted_image_certificates'] = [1, 2]
         self.req.body = jsonutils.dump_as_bytes(self.body)
         ex = self.assertRaises(exception.ValidationError,
-                               self.controller._action_rebuild,
+                               self.controller._rebuild,
                                self.req, FAKE_UUID, body=self.body)
         self.assertIn('is not of type', str(ex))
 
@@ -3710,7 +3707,7 @@ class ServersControllerRebuildTestV263(ControllerTest):
         self.body['rebuild']['trusted_image_certificates'] = "not-an-array"
         self.req.body = jsonutils.dump_as_bytes(self.body)
         ex = self.assertRaises(exception.ValidationError,
-                               self.controller._action_rebuild,
+                               self.controller._rebuild,
                                self.req, FAKE_UUID, body=self.body)
         self.assertIn('is not of type', str(ex))
 
@@ -3720,7 +3717,7 @@ class ServersControllerRebuildTestV263(ControllerTest):
         self.req.api_version_request = \
             api_version_request.APIVersionRequest('2.62')
         ex = self.assertRaises(exception.ValidationError,
-                               self.controller._action_rebuild,
+                               self.controller._rebuild,
                                self.req, FAKE_UUID, body=self.body)
         self.assertIn('Additional properties are not allowed', str(ex))
 
@@ -3762,7 +3759,7 @@ class ServersControllerRebuildTestV271(ControllerTest):
         self.mock_get.return_value = fakes.stub_instance_obj(ctx,
             vm_state=vm_states.ACTIVE, project_id=self.req_project_id,
             user_id=self.req_user_id)
-        server = self.controller._action_rebuild(
+        server = self.controller._rebuild(
             self.req, FAKE_UUID, body=self.body).obj['server']
         return server
 
@@ -3809,8 +3806,7 @@ class ServersControllerRebuildTestV275(ControllerTest):
             user_id=req.environ['nova.context'].user_id)
         self.mock_get.side_effect = fake_get
 
-        res_dict = self.controller._action_rebuild(req, FAKE_UUID,
-                                                   body=body).obj
+        res_dict = self.controller._rebuild(req, FAKE_UUID, body=body).obj
         get_only_fields_Rebuild = copy.deepcopy(GET_ONLY_FIELDS)
         get_only_fields_Rebuild.remove('key_name')
         for field in get_only_fields_Rebuild:
@@ -3848,8 +3844,7 @@ class ServersControllerRebuildTestV275(ControllerTest):
             project_id=req.environ['nova.context'].project_id,
             user_id=req.environ['nova.context'].user_id)
 
-        res_dict = self.controller._action_rebuild(req, FAKE_UUID,
-                                                   body=body).obj
+        res_dict = self.controller._rebuild(req, FAKE_UUID, body=body).obj
         for field in GET_ONLY_FIELDS:
             if field == 'OS-EXT-SRV-ATTR:user_data':
                 self.assertNotIn(field, res_dict['server'])
@@ -3928,7 +3923,7 @@ class ServersControllerRebuildTestV290(ControllerTest):
         # There's nothing to check here from the return value since the
         # 'rebuild' API is a cast and we immediately fetch the instance from
         # the database after this cast...which returns a mocked Instance
-        server = self.controller._action_rebuild(
+        server = self.controller._rebuild(
             req, FAKE_UUID, body=body,
         ).obj['server']
 
@@ -3952,7 +3947,7 @@ class ServersControllerRebuildTestV290(ControllerTest):
 
         ex = self.assertRaises(
             exception.ValidationError,
-            self.controller._action_rebuild,
+            self.controller._rebuild,
             req, FAKE_UUID, body=body)
         self.assertIn('hostname', str(ex))
 
@@ -4291,8 +4286,8 @@ class ServersControllerTriggerCrashDumpTest(ControllerTest):
     @mock.patch.object(compute_api.API, 'trigger_crash_dump')
     def test_trigger_crash_dump(self, mock_trigger_crash_dump):
         ctxt = self.req.environ['nova.context']
-        self.controller._action_trigger_crash_dump(self.req, FAKE_UUID,
-                                                   body=self.body)
+        self.controller._trigger_crash_dump(
+            self.req, FAKE_UUID, body=self.body)
         mock_trigger_crash_dump.assert_called_with(ctxt, self.instance)
 
     @mock.patch.object(compute_api.API, 'trigger_crash_dump')
@@ -4301,14 +4296,14 @@ class ServersControllerTriggerCrashDumpTest(ControllerTest):
             instance_id=FAKE_UUID)
 
         self.assertRaises(webob.exc.HTTPConflict,
-                          self.controller._action_trigger_crash_dump,
+                          self.controller._trigger_crash_dump,
                           self.req, FAKE_UUID, body=self.body)
 
     @mock.patch.object(compute_api.API, 'trigger_crash_dump',
                        fakes.fake_actions_to_locked_server)
     def test_trigger_crash_dump_locked_server(self):
         self.assertRaises(webob.exc.HTTPConflict,
-                          self.controller._action_trigger_crash_dump,
+                          self.controller._trigger_crash_dump,
                           self.req, FAKE_UUID, body=self.body)
 
     @mock.patch.object(compute_api.API, 'trigger_crash_dump')
@@ -4318,24 +4313,24 @@ class ServersControllerTriggerCrashDumpTest(ControllerTest):
             method='fake_method', state='fake_state')
 
         self.assertRaises(webob.exc.HTTPConflict,
-                          self.controller._action_trigger_crash_dump,
+                          self.controller._trigger_crash_dump,
                           self.req, FAKE_UUID, body=self.body)
 
     def test_trigger_crash_dump_with_bogus_id(self):
         self.assertRaises(webob.exc.HTTPNotFound,
-                          self.controller._action_trigger_crash_dump,
+                          self.controller._trigger_crash_dump,
                           self.req, 'test_inst', body=self.body)
 
     def test_trigger_crash_dump_schema_invalid_type(self):
         self.body['trigger_crash_dump'] = 'not null'
         self.assertRaises(exception.ValidationError,
-                          self.controller._action_trigger_crash_dump,
+                          self.controller._trigger_crash_dump,
                           self.req, FAKE_UUID, body=self.body)
 
     def test_trigger_crash_dump_schema_extra_property(self):
         self.body['extra_property'] = 'extra'
         self.assertRaises(exception.ValidationError,
-                          self.controller._action_trigger_crash_dump,
+                          self.controller._trigger_crash_dump,
                           self.req, FAKE_UUID, body=self.body)
 
 
@@ -8584,7 +8579,7 @@ class ServersActionsJsonTestV239(test.NoDBTestCase):
             },
         }
         self.assertRaises(webob.exc.HTTPNotFound,
-                          self.controller._action_create_image, self.req,
+                          self.controller._create_image, self.req,
                           FAKE_UUID, body=body)
         # starting from version 2.39 no quota checks on Nova side are performed
         # for 'createImage' action after removing 'image-metadata' proxy API

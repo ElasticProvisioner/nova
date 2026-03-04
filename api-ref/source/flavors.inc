@@ -33,6 +33,7 @@ Request
   - minDisk: minDisk
   - minRam: minRam
   - is_public: flavor_is_public_query
+  - name: flavor_name_query
 
 Response
 --------
@@ -45,9 +46,9 @@ Response
    - description: flavor_description_resp
    - links: links
 
-**Example List Flavors (v2.55)**
+**Example List Flavors (v2.102)**
 
-.. literalinclude:: ../../doc/api_samples/flavors/v2.55/flavors-list-resp.json
+.. literalinclude:: ../../doc/api_samples/flavors/v2.102/flavors-list-resp.json
    :language: javascript
 
 Create Flavor
@@ -91,9 +92,9 @@ Request
    - rxtx_factor: flavor_rxtx_factor_in
    - os-flavor-access:is_public: flavor_is_public_in
 
-**Example Create Flavor (v2.55)**
+**Example Create Flavor (v2.102)**
 
-.. literalinclude:: ../../doc/api_samples/flavor-manage/v2.55/flavor-create-post-req.json
+.. literalinclude:: ../../doc/api_samples/flavor-manage/v2.102/flavor-create-post-req.json
    :language: javascript
 
 Response
@@ -116,10 +117,9 @@ Response
    - os-flavor-access:is_public: flavor_is_public
    - extra_specs: extra_specs_2_61
 
+**Example Create Flavor (v2.102)**
 
-**Example Create Flavor (v2.75)**
-
-.. literalinclude:: ../../doc/api_samples/flavor-manage/v2.75/flavor-create-post-resp.json
+.. literalinclude:: ../../doc/api_samples/flavor-manage/v2.102/flavor-create-post-resp.json
    :language: javascript
 
 List Flavors With Details
@@ -167,9 +167,9 @@ Response
    - os-flavor-access:is_public: flavor_is_public
    - extra_specs: extra_specs_2_61
 
-**Example List Flavors With Details (v2.75)**
+**Example List Flavors With Details (v2.102)**
 
-.. literalinclude:: ../../doc/api_samples/flavors/v2.75/flavors-detail-resp.json
+.. literalinclude:: ../../doc/api_samples/flavors/v2.102/flavors-detail-resp.json
    :language: javascript
 
 Show Flavor Details
@@ -210,9 +210,9 @@ Response
    - os-flavor-access:is_public: flavor_is_public
    - extra_specs: extra_specs_2_61
 
-**Example Show Flavor Details (v2.75)**
+**Example Show Flavor Details (v2.102)**
 
-.. literalinclude:: ../../doc/api_samples/flavors/v2.75/flavor-get-resp.json
+.. literalinclude:: ../../doc/api_samples/flavors/v2.102/flavor-get-resp.json
    :language: javascript
 
 Update Flavor Description

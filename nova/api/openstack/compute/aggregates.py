@@ -50,7 +50,8 @@ class AggregateController(wsgi.Controller):
         self.conductor_tasks = conductor.ComputeTaskAPI()
 
     @wsgi.expected_errors(())
-    @validation.query_schema(schema.index_query)
+    @validation.query_schema(schema.index_query, '2.1', '2.101')
+    @validation.query_schema(schema.index_query_v2102, '2.102')
     @validation.response_body_schema(schema.index_response, '2.1', '2.40')
     @validation.response_body_schema(schema.index_response_v241, '2.41')
     def index(self, req):
@@ -100,7 +101,8 @@ class AggregateController(wsgi.Controller):
         return agg
 
     @wsgi.expected_errors((400, 404))
-    @validation.query_schema(schema.show_query)
+    @validation.query_schema(schema.show_query, '2.1', '2.101')
+    @validation.query_schema(schema.show_query_v2102, '2.102')
     @validation.response_body_schema(schema.show_response, '2.1', '2.40')
     @validation.response_body_schema(schema.show_response_v241, '2.41')
     def show(self, req, id):

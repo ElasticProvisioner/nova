@@ -173,7 +173,8 @@ class MicroversionsSchemaTestCase(APIValidationTestCase):
                 'foo': {
                     'type': 'integer',
                 }
-            }
+            },
+            'additionalProperties': False,
         }
         schema_v20_str = copy.deepcopy(schema_v21_int)
         schema_v20_str['properties']['foo'] = {'type': 'string'}
@@ -221,7 +222,8 @@ class MicroversionsSchemaTestCase(APIValidationTestCase):
                 'foo': {
                     'type': 'integer'
                 }
-            }
+            },
+            'additionalProperties': False,
         }
 
         @validation.schema(schema_none)
@@ -318,6 +320,8 @@ class RequiredDisableTestCase(APIValidationTestCase):
                 'type': 'integer',
             },
         },
+        'required': [],
+        'additionalProperties': True,
     }
 
     def test_validate_required_disable(self):
@@ -334,7 +338,8 @@ class RequiredEnableTestCase(APIValidationTestCase):
                 'type': 'integer',
             },
         },
-        'required': ['foo']
+        'required': ['foo'],
+        'additionalProperties': False,
     }
 
     def test_validate_required_enable(self):
@@ -356,6 +361,7 @@ class AdditionalPropertiesEnableTestCase(APIValidationTestCase):
             },
         },
         'required': ['foo'],
+        'additionalProperties': True,
     }
 
     def test_validate_additionalProperties_enable(self):
@@ -440,6 +446,7 @@ class StringTestCase(APIValidationTestCase):
                 'type': 'string',
             },
         },
+        'additionalProperties': False,
     }
 
     def test_validate_string(self):
@@ -475,6 +482,7 @@ class StringLengthTestCase(APIValidationTestCase):
                 'maxLength': 10,
             },
         },
+        'additionalProperties': False,
     }
 
     def test_validate_string_length(self):
@@ -507,6 +515,7 @@ class IntegerTestCase(APIValidationTestCase):
                 'pattern': '^[0-9]+$',
             },
         },
+        'additionalProperties': False,
     }
 
     def test_validate_integer(self):
@@ -553,6 +562,7 @@ class IntegerRangeTestCase(APIValidationTestCase):
                 'maximum': 10,
             },
         },
+        'additionalProperties': False,
     }
 
     def test_validate_integer_range(self):
@@ -589,6 +599,7 @@ class BooleanTestCase(APIValidationTestCase):
         'properties': {
             'foo': parameter_types.boolean,
         },
+        'additionalProperties': False,
     }
 
     def test_validate_boolean(self):
@@ -623,6 +634,7 @@ class FQDNTestCase(APIValidationTestCase):
         'properties': {
             'foo': parameter_types.fqdn,
         },
+        'additionalProperties': False,
     }
 
     def test_validate_fqdn(self):
@@ -655,6 +667,7 @@ class NameTestCase(APIValidationTestCase):
         'properties': {
             'foo': parameter_types.name,
         },
+        'additionalProperties': False,
     }
 
     def test_validate_name(self):
@@ -695,6 +708,7 @@ class NameWithLeadingTrailingSpacesTestCase(APIValidationTestCase):
         'properties': {
             'foo': parameter_types.name_with_leading_trailing_spaces,
         },
+        'additionalProperties': False,
     }
 
     def test_validate_name(self):
@@ -737,7 +751,8 @@ class NameOrNoneTestCase(APIValidationTestCase):
         'type': 'object',
         'properties': {
             'foo': parameter_types.name_or_none
-        }
+        },
+        'additionalProperties': False,
     }
 
     def test_valid(self):
@@ -774,6 +789,7 @@ class CidrFormatTestCase(APIValidationTestCase):
                 'format': 'cidr',
             },
         },
+        'additionalProperties': False,
     }
 
     def test_validate_cidr(self):
@@ -817,6 +833,7 @@ class DatetimeTestCase(APIValidationTestCase):
                 'format': 'date-time',
             },
         },
+        'additionalProperties': False,
     }
 
     def test_validate_datetime(self):
@@ -854,6 +871,7 @@ class UuidTestCase(APIValidationTestCase):
                 'format': 'uuid',
             },
         },
+        'additionalProperties': False,
     }
 
     def test_validate_uuid(self):
@@ -895,6 +913,7 @@ class UriTestCase(APIValidationTestCase):
                 'format': 'uri',
             },
         },
+        'additionalProperties': False,
     }
 
     def test_validate_uri(self):
@@ -946,6 +965,7 @@ class Ipv4TestCase(APIValidationTestCase):
                 'format': 'ipv4',
             },
         },
+        'additionalProperties': False,
     }
 
     def test_validate_ipv4(self):
@@ -983,6 +1003,7 @@ class Ipv6TestCase(APIValidationTestCase):
                 'format': 'ipv6',
             },
         },
+        'additionalProperties': False,
     }
 
     def test_validate_ipv6(self):
@@ -1018,6 +1039,7 @@ class Base64TestCase(APIValidationTestCase):
                 'format': 'base64',
             },
         },
+        'additionalProperties': False,
     }
 
     def test_validate_base64(self):
@@ -1045,6 +1067,7 @@ class RegexFormatTestCase(APIValidationTestCase):
                 'format': 'regex',
             },
         },
+        'additionalProperties': False,
     }
 
     def test_validate_regex(self):

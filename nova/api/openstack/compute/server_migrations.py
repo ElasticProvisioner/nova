@@ -119,7 +119,8 @@ class ServerMigrationsController(wsgi.Controller):
 
     @wsgi.api_version("2.23")
     @wsgi.expected_errors(404)
-    @validation.query_schema(schema.index_query)
+    @validation.query_schema(schema.index_query, '2.23', '2.101')
+    @validation.query_schema(schema.index_query_v2102, '2.102')
     @validation.response_body_schema(schema.index_response_v223, '2.23', '2.58')  # noqa: E501
     @validation.response_body_schema(schema.index_response_v259, '2.59', '2.79')  # noqa: E501
     @validation.response_body_schema(schema.index_response_v280, '2.80')
@@ -148,7 +149,8 @@ class ServerMigrationsController(wsgi.Controller):
 
     @wsgi.api_version("2.23")
     @wsgi.expected_errors(404)
-    @validation.query_schema(schema.show_query)
+    @validation.query_schema(schema.show_query, '2.23', '2.101')
+    @validation.query_schema(schema.show_query_v2102, '2.102')
     @validation.response_body_schema(schema.show_response_v223, '2.23', '2.58')
     @validation.response_body_schema(schema.show_response_v259, '2.59', '2.79')  # noqa: E501
     @validation.response_body_schema(schema.show_response_v280, '2.80')

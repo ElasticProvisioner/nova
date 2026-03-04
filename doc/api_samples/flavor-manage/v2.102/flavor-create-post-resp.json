@@ -1,0 +1,24 @@
+{
+    "flavor": {
+        "OS-FLV-EXT-DATA:ephemeral": 0,
+        "description": "test description",
+        "disk": 10,
+        "extra_specs": {},
+        "id": "10",
+        "links": [
+            {
+                "href": "http://openstack.example.com/v2.1/6f70656e737461636b20342065766572/flavors/10",
+                "rel": "self"
+            },
+            {
+                "href": "http://openstack.example.com/6f70656e737461636b20342065766572/flavors/10",
+                "rel": "bookmark"
+            }
+        ],
+        "name": "test_flavor",
+        "os-flavor-access:is_public": true,
+        "ram": 1024,
+        "swap": 0,
+        "vcpus": 2
+    }
+}

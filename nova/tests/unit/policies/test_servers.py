@@ -419,7 +419,7 @@ class ServersPolicyTest(base.BasePolicyTest):
         rule_name = policies.SERVERS % 'show:flavor-extra-specs'
         authorize_res, unauthorize_res = self.common_policy_auth(
             self.project_reader_authorized_contexts,
-            rule_name, self.controller._action_rebuild,
+            rule_name, self.controller._rebuild,
             req, self.instance.uuid,
             body={'rebuild': {"imageRef": uuids.fake_id}},
             fatal=False)
@@ -629,7 +629,7 @@ class ServersPolicyTest(base.BasePolicyTest):
 
         self.common_policy_auth(self.project_action_authorized_contexts,
                                 rule_name,
-                                self.controller._action_confirm_resize,
+                                self.controller._confirm_resize,
                                 self.req, self.instance.uuid,
                                 body={'confirmResize': None})
 
@@ -639,7 +639,7 @@ class ServersPolicyTest(base.BasePolicyTest):
 
         self.common_policy_auth(self.project_action_authorized_contexts,
                                 rule_name,
-                                self.controller._action_revert_resize,
+                                self.controller._revert_resize,
                                 self.req, self.instance.uuid,
                                 body={'revertResize': None})
 
@@ -649,7 +649,7 @@ class ServersPolicyTest(base.BasePolicyTest):
 
         self.common_policy_auth(self.project_action_authorized_contexts,
                                 rule_name,
-                                self.controller._action_reboot,
+                                self.controller._reboot,
                                 self.req, self.instance.uuid,
                                 body={'reboot': {'type': 'soft'}})
 
@@ -658,7 +658,7 @@ class ServersPolicyTest(base.BasePolicyTest):
         rule_name = policies.SERVERS % 'resize'
         self.common_policy_auth(self.project_action_authorized_contexts,
                                 rule_name,
-                                self.controller._action_resize,
+                                self.controller._resize,
                                 self.req, self.instance.uuid,
                                 body={'resize': {'flavorRef': 'f1'}})
 
@@ -671,7 +671,7 @@ class ServersPolicyTest(base.BasePolicyTest):
         self.policy.set_rules({rule_name: "user_id:%(user_id)s"},
             overwrite=False)
         exc = self.assertRaises(
-            exception.PolicyNotAuthorized, self.controller._action_resize,
+            exception.PolicyNotAuthorized, self.controller._resize,
             req, self.instance.uuid, body=body)
         self.assertEqual(
             "Policy doesn't allow %s to be performed." % rule_name,
@@ -684,30 +684,30 @@ class ServersPolicyTest(base.BasePolicyTest):
         self.policy.set_rules({rule_name: "user_id:%(user_id)s"},
             overwrite=False)
         body = {'resize': {'flavorRef': 'f1'}}
-        self.controller._action_resize(self.req,
+        self.controller._resize(self.req,
                                        self.instance.uuid, body=body)
 
     @mock.patch('nova.compute.api.API.start')
-    def test_start_server_policy(self, mock_start):
+    def test_start_policy(self, mock_start):
         rule_name = policies.SERVERS % 'start'
 
         self.common_policy_auth(self.project_action_authorized_contexts,
                                 rule_name,
-                                self.controller._start_server,
+                                self.controller._start,
                                 self.req, self.instance.uuid,
                                 body={'os-start': None})
 
     @mock.patch('nova.compute.api.API.stop')
-    def test_stop_server_policy(self, mock_stop):
+    def test_stop_policy(self, mock_stop):
         rule_name = policies.SERVERS % 'stop'
 
         self.common_policy_auth(self.project_action_authorized_contexts,
                                 rule_name,
-                                self.controller._stop_server,
+                                self.controller._stop,
                                 self.req, self.instance.uuid,
                                 body={'os-stop': None})
 
-    def test_stop_server_policy_failed_with_other_user(self):
+    def test_stop_policy_failed_with_other_user(self):
         # Change the user_id in request context.
         req = fakes.HTTPRequest.blank('')
         req.environ['nova.context'].user_id = 'other-user'
@@ -716,20 +716,20 @@ class ServersPolicyTest(base.BasePolicyTest):
         self.policy.set_rules({rule_name: "user_id:%(user_id)s"},
             overwrite=False)
         exc = self.assertRaises(
-            exception.PolicyNotAuthorized, self.controller._stop_server,
+            exception.PolicyNotAuthorized, self.controller._stop,
             req, self.instance.uuid, body=body)
         self.assertEqual(
             "Policy doesn't allow %s to be performed." % rule_name,
             exc.format_message())
 
     @mock.patch('nova.compute.api.API.stop')
-    def test_stop_server_overridden_policy_pass_with_same_user(
+    def test_stop_overridden_policy_pass_with_same_user(
         self, mock_stop):
         rule_name = policies.SERVERS % 'stop'
         self.policy.set_rules({rule_name: "user_id:%(user_id)s"},
             overwrite=False)
         body = {'os-stop': None}
-        self.controller._stop_server(self.req,
+        self.controller._stop(self.req,
                                      self.instance.uuid, body=body)
 
     @mock.patch('nova.compute.api.API.rebuild')
@@ -737,7 +737,7 @@ class ServersPolicyTest(base.BasePolicyTest):
         rule_name = policies.SERVERS % 'rebuild'
         self.common_policy_auth(self.project_action_authorized_contexts,
                                 rule_name,
-                                self.controller._action_rebuild,
+                                self.controller._rebuild,
                                 self.req, self.instance.uuid,
                                 body={'rebuild': {"imageRef": uuids.fake_id}})
 
@@ -750,7 +750,7 @@ class ServersPolicyTest(base.BasePolicyTest):
         self.policy.set_rules({rule_name: "user_id:%(user_id)s"},
             overwrite=False)
         exc = self.assertRaises(
-            exception.PolicyNotAuthorized, self.controller._action_rebuild,
+            exception.PolicyNotAuthorized, self.controller._rebuild,
             req, self.instance.uuid, body=body)
         self.assertEqual(
             "Policy doesn't allow %s to be performed." % rule_name,
@@ -763,7 +763,7 @@ class ServersPolicyTest(base.BasePolicyTest):
         self.policy.set_rules({rule_name: "user_id:%(user_id)s"},
             overwrite=False)
         body = {'rebuild': {"imageRef": uuids.fake_id}}
-        self.controller._action_rebuild(self.req,
+        self.controller._rebuild(self.req,
                                         self.instance.uuid, body=body)
 
     @mock.patch('nova.compute.api.API.rebuild')
@@ -790,7 +790,7 @@ class ServersPolicyTest(base.BasePolicyTest):
 
         self.common_policy_auth(self.project_action_authorized_contexts,
                                 check_rule,
-                                self.controller._action_rebuild,
+                                self.controller._rebuild,
                                 req, self.instance.uuid, body=body)
 
     def test_rebuild_trusted_certs_policy_failed_with_other_user(self):
@@ -810,7 +810,7 @@ class ServersPolicyTest(base.BasePolicyTest):
              rule_name: "user_id:%(user_id)s"},
             overwrite=False)
         exc = self.assertRaises(
-            exception.PolicyNotAuthorized, self.controller._action_rebuild,
+            exception.PolicyNotAuthorized, self.controller._rebuild,
             req, self.instance.uuid, body=body)
         self.assertEqual(
             "Policy doesn't allow %s to be performed." % rule_name,
@@ -831,7 +831,7 @@ class ServersPolicyTest(base.BasePolicyTest):
         self.policy.set_rules(
             {rule: "@",
              rule_name: "user_id:%(user_id)s"}, overwrite=False)
-        self.controller._action_rebuild(req,
+        self.controller._rebuild(req,
                                         self.instance.uuid, body=body)
 
     @mock.patch('nova.objects.BlockDeviceMappingList.get_by_instance_uuid')
@@ -842,7 +842,7 @@ class ServersPolicyTest(base.BasePolicyTest):
         rule_name = policies.SERVERS % 'create_image'
         self.common_policy_auth(self.project_action_authorized_contexts,
                                 rule_name,
-                                self.controller._action_create_image,
+                                self.controller._create_image,
                                 self.req, self.instance.uuid,
                                 body={'createImage': {"name": 'test'}})
 
@@ -866,7 +866,7 @@ class ServersPolicyTest(base.BasePolicyTest):
                 base.rule_if_system, rule, rule_name)
         self.common_policy_auth(self.project_action_authorized_contexts,
                                 check_rule,
-                                self.controller._action_create_image,
+                                self.controller._create_image,
                                 self.req, self.instance.uuid,
                                 body={'createImage': {"name": 'test'}})
 
@@ -876,7 +876,7 @@ class ServersPolicyTest(base.BasePolicyTest):
         req = fakes.HTTPRequest.blank('', version='2.17')
         self.common_policy_auth(self.project_action_authorized_contexts,
                                 rule_name,
-                                self.controller._action_trigger_crash_dump,
+                                self.controller._trigger_crash_dump,
                                 req, self.instance.uuid,
                                 body={'trigger_crash_dump': None})
 
@@ -890,7 +890,7 @@ class ServersPolicyTest(base.BasePolicyTest):
             overwrite=False)
         exc = self.assertRaises(
             exception.PolicyNotAuthorized,
-            self.controller._action_trigger_crash_dump,
+            self.controller._trigger_crash_dump,
             req, self.instance.uuid, body=body)
         self.assertEqual(
             "Policy doesn't allow %s to be performed." % rule_name,
@@ -904,7 +904,7 @@ class ServersPolicyTest(base.BasePolicyTest):
         self.policy.set_rules({rule_name: "user_id:%(user_id)s"},
             overwrite=False)
         body = {'trigger_crash_dump': None}
-        self.controller._action_trigger_crash_dump(req,
+        self.controller._trigger_crash_dump(req,
             self.instance.uuid, body=body)
 
     def test_server_detail_with_extended_attr_policy(self):
@@ -967,7 +967,7 @@ class ServersPolicyTest(base.BasePolicyTest):
         rule_name = ea_policies.BASE_POLICY_NAME
         authorize_res, unauthorize_res = self.common_policy_auth(
             self.project_admin_authorized_contexts,
-            rule_name, self.controller._action_rebuild,
+            rule_name, self.controller._rebuild,
             req, self.instance.uuid,
             body={'rebuild': {"imageRef": uuids.fake_id}},
             fatal=False)
@@ -1074,7 +1074,7 @@ class ServersPolicyTest(base.BasePolicyTest):
         rule_name = policies.SERVERS % 'show:host_status'
         authorize_res, unauthorize_res = self.common_policy_auth(
             self.project_admin_authorized_contexts,
-            rule_name, self.controller._action_rebuild,
+            rule_name, self.controller._rebuild,
             req, self.instance.uuid,
             body={'rebuild': {"imageRef": uuids.fake_id}},
             fatal=False)
@@ -1193,7 +1193,7 @@ class ServersPolicyTest(base.BasePolicyTest):
         rule_name = policies.SERVERS % 'show:host_status:unknown-only'
         authorize_res, unauthorize_res = self.common_policy_auth(
             self.project_admin_authorized_contexts,
-            rule_name, self.controller._action_rebuild,
+            rule_name, self.controller._rebuild,
             req, self.instance.uuid,
             body={'rebuild': {"imageRef": uuids.fake_id}},
             fatal=False)

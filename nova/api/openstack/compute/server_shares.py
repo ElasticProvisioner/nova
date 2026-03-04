@@ -38,6 +38,7 @@ def _get_instance_mapping(context, server_id):
         raise webob.exc.HTTPNotFound(explanation=e.format_message())
 
 
+@validation.validated
 class ServerSharesController(wsgi.Controller):
     _view_builder_class = server_shares.ViewBuilder
 
@@ -231,6 +232,7 @@ class ServerSharesController(wsgi.Controller):
     @wsgi.api_version("2.97")
     @wsgi.response(200)
     @wsgi.expected_errors((400, 403, 404, 409))
+    @validation.response_body_schema(schema.delete_response)
     def delete(self, req, server_id, id):
         context = req.environ["nova.context"]
         # Get instance mapping to query the required cell database

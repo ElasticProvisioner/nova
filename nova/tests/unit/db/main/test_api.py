@@ -329,8 +329,8 @@ def _create_aggregate_with_hosts(context=context.get_admin_context(),
     return result
 
 
-@mock.patch.object(db, '_get_regexp_ops',
-        return_value=(lambda x: x, 'LIKE'))
+@mock.patch.object(
+    db_utils, 'get_regexp_ops', return_value=(lambda x: x, 'LIKE'))
 class UnsupportedDbRegexpTestCase(DbTestCase):
 
     def test_instance_get_all_by_filters_paginate(self, mock_get_regexp):
@@ -719,28 +719,6 @@ class SqlAlchemyDbApiNoDbTestCase(test.NoDBTestCase):
         db.convert_objects_related_datetimes(test1, *datetime_keys)
         self.assertEqual(test1, expected_dict)
 
-    def test_get_regexp_op_for_database_sqlite(self):
-        filter, op = db._get_regexp_ops('sqlite:///')
-        self.assertEqual('|', filter('|'))
-        self.assertEqual('REGEXP', op)
-
-    def test_get_regexp_op_for_database_mysql(self):
-        filter, op = db._get_regexp_ops(
-                    'mysql+pymysql://root@localhost')
-        self.assertEqual('\\|', filter('|'))
-        self.assertEqual('REGEXP', op)
-
-    def test_get_regexp_op_for_database_postgresql(self):
-        filter, op = db._get_regexp_ops(
-                    'postgresql://localhost')
-        self.assertEqual('|', filter('|'))
-        self.assertEqual('~', op)
-
-    def test_get_regexp_op_for_database_unknown(self):
-        filter, op = db._get_regexp_ops('notdb:///')
-        self.assertEqual('|', filter('|'))
-        self.assertEqual('LIKE', op)
-
     @mock.patch.object(db, 'context_manager')
     def test_get_engine(self, mock_ctxt_mgr):
         db.get_engine()
@@ -768,22 +746,6 @@ class SqlAlchemyDbApiNoDbTestCase(test.NoDBTestCase):
         db.instance_get_all_by_filters_sort(ctxt, {}, marker='foo')
         mock_get.assert_called_once_with(mock.sentinel.elevated, 'foo')
         ctxt.elevated.assert_called_once_with(read_deleted='yes')
-
-    def test_replace_sub_expression(self):
-        ret = db._safe_regex_mysql('|')
-        self.assertEqual('\\|', ret)
-
-        ret = db._safe_regex_mysql('||')
-        self.assertEqual('\\|\\|', ret)
-
-        ret = db._safe_regex_mysql('a||')
-        self.assertEqual('a\\|\\|', ret)
-
-        ret = db._safe_regex_mysql('|a|')
-        self.assertEqual('\\|a\\|', ret)
-
-        ret = db._safe_regex_mysql('||a')
-        self.assertEqual('\\|\\|a', ret)
 
 
 class SqlAlchemyDbApiTestCase(DbTestCase):

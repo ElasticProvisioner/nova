@@ -87,7 +87,8 @@ class QuotaClassSetsController(wsgi.Controller):
             return []
 
     @wsgi.expected_errors(())
-    @validation.query_schema(schema.show_query)
+    @validation.query_schema(schema.show_query, '2.1', '2.101')
+    @validation.query_schema(schema.show_query_v2102, '2.102')
     @validation.response_body_schema(schema.show_response, '2.1', '2.49')
     @validation.response_body_schema(schema.show_response_v250, '2.50', '2.56')  # noqa: E501
     @validation.response_body_schema(schema.show_response_v257, '2.57')

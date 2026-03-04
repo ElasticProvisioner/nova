@@ -1,0 +1,13 @@
+---
+features:
+  - |
+    The v2.102 microversion has been introduced. This allows users to search
+    flavors by name, e.g.::
+
+        GET /flavors?name=gpu
+
+    In addition, the ``rxtx_factor`` and ``OS-FLV-DISABLED:disabled`` fields
+    have been removed from all flavors responses, while the ``rxtx_factor``
+    field can no longer be provided when creating a server. Finally, all APIs
+    now reject unknown query string parameters with a HTTP 400 (Bad Request)
+    error, building upon work first started in microversion 2.75.

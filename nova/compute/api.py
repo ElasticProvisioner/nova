@@ -129,7 +129,7 @@ SUPPORT_SHARES = 67
 MIN_COMPUTE_SOUND_MODEL_TRAITS = 69
 MIN_COMPUTE_USB_MODEL_TRAITS = 70
 
-MIN_COMPUTE_VTPM_LIVE_MIGRATION = None
+MIN_COMPUTE_VTPM_LIVE_MIGRATION = 72
 
 # FIXME(danms): Keep a global cache of the cells we find the
 # first time we look. This needs to be refreshed on a timer or
@@ -290,8 +290,7 @@ def reject_legacy_vtpm_live_migration(function):
             with nova_context.target_cell(context, im.cell_mapping) as cctxt:
                 min_ver = objects.service.Service.get_minimum_version(
                         cctxt, 'nova-compute')
-            if (MIN_COMPUTE_VTPM_LIVE_MIGRATION is None or
-                    min_ver < MIN_COMPUTE_VTPM_LIVE_MIGRATION):
+            if min_ver < MIN_COMPUTE_VTPM_LIVE_MIGRATION:
                 raise exception.VTPMOldCompute()
         return function(self, context, instance, *args, **kwargs)
     return inner
@@ -2039,9 +2038,9 @@ class API:
                     volume = volumes[volume_id]
                     # We do not validate the instance and volume AZ here
                     # because that is done earlier by _provision_instances.
-                    self._check_attach_and_reserve_volume(
-                        context, volume, instance, bdm, supports_multiattach,
-                        validate_az=False)
+                    compute_utils.check_attach_and_reserve_volume(
+                        context, self.volume_api, volume, instance, bdm,
+                        supports_multiattach, validate_az=False)
                     bdm.volume_size = volume.get('size')
                 except (exception.CinderConnectionFailed,
                         exception.InvalidVolume,
@@ -5056,42 +5055,28 @@ class API:
         """Inject network info for the instance."""
         self.compute_rpcapi.inject_network_info(context, instance=instance)
 
-    def _create_volume_bdm(self, context, instance, device, volume,
-                           disk_bus, device_type, is_local_creation=False,
-                           tag=None, delete_on_termination=False):
+    def _create_volume_bdm_locally(self, context, instance, device, volume,
+            disk_bus, device_type, tag=None, delete_on_termination=False):
         volume_id = volume['id']
-        if is_local_creation:
-            # when the creation is done locally we can't specify the device
-            # name as we do not have a way to check that the name specified is
-            # a valid one.
-            # We leave the setting of that value when the actual attach
-            # happens on the compute manager
-            # NOTE(artom) Local attach (to a shelved-offload instance) cannot
-            # support device tagging because we have no way to call the compute
-            # manager to check that it supports device tagging. In fact, we
-            # don't even know which computer manager the instance will
-            # eventually end up on when it's unshelved.
-            volume_bdm = objects.BlockDeviceMapping(
-                context=context,
-                source_type='volume', destination_type='volume',
-                instance_uuid=instance.uuid, boot_index=None,
-                volume_id=volume_id,
-                device_name=None, guest_format=None,
-                disk_bus=disk_bus, device_type=device_type,
-                delete_on_termination=delete_on_termination)
-            volume_bdm.create()
-        else:
-            # NOTE(vish): This is done on the compute host because we want
-            #             to avoid a race where two devices are requested at
-            #             the same time. When db access is removed from
-            #             compute, the bdm will be created here and we will
-            #             have to make sure that they are assigned atomically.
-            volume_bdm = self.compute_rpcapi.reserve_block_device_name(
-                context, instance, device, volume_id, disk_bus=disk_bus,
-                device_type=device_type, tag=tag,
-                multiattach=volume['multiattach'])
-            volume_bdm.delete_on_termination = delete_on_termination
-            volume_bdm.save()
+        # when the creation is done locally we can't specify the device
+        # name as we do not have a way to check that the name specified is
+        # a valid one.
+        # We leave the setting of that value when the actual attach
+        # happens on the compute manager
+        # NOTE(artom) Local attach (to a shelved-offload instance) cannot
+        # support device tagging because we have no way to call the compute
+        # manager to check that it supports device tagging. In fact, we
+        # don't even know which computer manager the instance will
+        # eventually end up on when it's unshelved.
+        volume_bdm = objects.BlockDeviceMapping(
+            context=context,
+            source_type='volume', destination_type='volume',
+            instance_uuid=instance.uuid, boot_index=None,
+            volume_id=volume_id,
+            device_name=None, guest_format=None,
+            disk_bus=disk_bus, device_type=device_type,
+            delete_on_termination=delete_on_termination)
+        volume_bdm.create()
         return volume_bdm
 
     def _check_volume_already_attached(
@@ -5142,86 +5127,6 @@ class API:
             msg = _("volume %s already attached") % volume['id']
             raise exception.InvalidVolume(reason=msg)
 
-    def _check_attach_and_reserve_volume(self, context, volume, instance,
-                                         bdm, supports_multiattach=False,
-                                         validate_az=True):
-        """Perform checks against the instance and volume before attaching.
-
-        If validation succeeds, the bdm is updated with an attachment_id which
-        effectively reserves it during the attach process in cinder.
-
-        :param context: nova auth RequestContext
-        :param volume: volume dict from cinder
-        :param instance: Instance object
-        :param bdm: BlockDeviceMapping object
-        :param supports_multiattach: True if the request supports multiattach
-            volumes, i.e. microversion >= 2.60, False otherwise
-        :param validate_az: True if the instance and volume availability zones
-            should be validated for cross_az_attach, False to not validate AZ
-        """
-        volume_id = volume['id']
-        if validate_az:
-            self.volume_api.check_availability_zone(context, volume,
-                                                    instance=instance)
-        # If volume.multiattach=True and the microversion to
-        # support multiattach is not used, fail the request.
-        if volume['multiattach'] and not supports_multiattach:
-            raise exception.MultiattachNotSupportedOldMicroversion()
-
-        attachment_id = self.volume_api.attachment_create(
-            context, volume_id, instance.uuid)['id']
-        bdm.attachment_id = attachment_id
-        # NOTE(ildikov): In case of boot from volume the BDM at this
-        # point is not yet created in a cell database, so we can't
-        # call save().  When attaching a volume to an existing
-        # instance, the instance is already in a cell and the BDM has
-        # been created in that same cell so updating here in that case
-        # is "ok".
-        if bdm.obj_attr_is_set('id'):
-            bdm.save()
-
-    # TODO(stephenfin): Fold this back in now that cells v1 no longer needs to
-    # override it.
-    def _attach_volume(self, context, instance, volume, device,
-                       disk_bus, device_type, tag=None,
-                       supports_multiattach=False,
-                       delete_on_termination=False):
-        """Attach an existing volume to an existing instance.
-
-        This method is separated to make it possible for cells version
-        to override it.
-        """
-        try:
-            volume_bdm = self._create_volume_bdm(
-                context, instance, device, volume, disk_bus=disk_bus,
-                device_type=device_type, tag=tag,
-                delete_on_termination=delete_on_termination)
-        except oslo_exceptions.MessagingTimeout:
-            # The compute node might have already created the attachment but
-            # we never received the answer. In this case it is safe to delete
-            # the attachment as nobody will ever pick it up again.
-            with excutils.save_and_reraise_exception():
-                try:
-                    objects.BlockDeviceMapping.get_by_volume_and_instance(
-                        context, volume['id'], instance.uuid).destroy()
-                    LOG.debug("Delete BDM after compute did not respond to "
-                              f"attachment request for volume {volume['id']}")
-                except exception.VolumeBDMNotFound:
-                    LOG.debug("BDM not found, ignoring removal. "
-                              f"Error attaching volume {volume['id']}")
-        try:
-            self._check_attach_and_reserve_volume(context, volume, instance,
-                                                  volume_bdm,
-                                                  supports_multiattach)
-            self._record_action_start(
-                context, instance, instance_actions.ATTACH_VOLUME)
-            self.compute_rpcapi.attach_volume(context, instance, volume_bdm)
-        except Exception:
-            with excutils.save_and_reraise_exception():
-                volume_bdm.destroy()
-
-        return volume_bdm.device_name
-
     def _attach_volume_shelved_offloaded(self, context, instance, volume,
                                          device, disk_bus, device_type,
                                          delete_on_termination):
@@ -5252,13 +5157,13 @@ class API:
                                        instance.uuid,
                                        dev)
 
-        volume_bdm = self._create_volume_bdm(
+        volume_bdm = self._create_volume_bdm_locally(
             context, instance, device, volume, disk_bus=disk_bus,
-            device_type=device_type, is_local_creation=True,
+            device_type=device_type,
             delete_on_termination=delete_on_termination)
         try:
-            self._check_attach_and_reserve_volume(context, volume, instance,
-                                                  volume_bdm)
+            compute_utils.check_attach_and_reserve_volume(context,
+                self.volume_api, volume, instance, volume_bdm)
             self._record_action_start(
                 context, instance,
                 instance_actions.ATTACH_VOLUME)
@@ -5278,7 +5183,8 @@ class API:
     def attach_volume(self, context, instance, volume_id, device=None,
                       disk_bus=None, device_type=None, tag=None,
                       supports_multiattach=False,
-                      delete_on_termination=False):
+                      delete_on_termination=False,
+                      needs_device_returned=False):
         """Attach an existing volume to an existing instance."""
         # NOTE(vish): Fail fast if the device is not going to pass. This
         #             will need to be removed along with the test if we
@@ -5289,7 +5195,7 @@ class API:
 
         # Make sure the volume isn't already attached to this instance
         # because we'll use the v3.44 attachment flow in
-        # _check_attach_and_reserve_volume and Cinder will allow multiple
+        # check_attach_and_reserve_volume and Cinder will allow multiple
         # attachments between the same volume and instance but the old flow
         # API semantics don't allow that so we enforce it here.
         # NOTE(lyarwood): Ensure that non multiattach volumes don't already
@@ -5322,10 +5228,11 @@ class API:
                                                          device_type,
                                                          delete_on_termination)
 
-        return self._attach_volume(context, instance, volume, device,
-                                   disk_bus, device_type, tag=tag,
-                                   supports_multiattach=supports_multiattach,
-                                   delete_on_termination=delete_on_termination)
+        return self.compute_task_api.attach_volume(context, instance,
+                volume, device, disk_bus, device_type, tag=tag,
+                supports_multiattach=supports_multiattach,
+                delete_on_termination=delete_on_termination,
+                do_cast=not needs_device_returned)
 
     def _detach_volume_shelved_offloaded(self, context, instance, volume):
         """Detach a volume from an instance in shelved offloaded state.

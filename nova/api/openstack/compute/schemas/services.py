@@ -68,7 +68,6 @@ update_v253 = {
     'additionalProperties': False
 }
 
-
 index_query = {
     'type': 'object',
     'properties': {

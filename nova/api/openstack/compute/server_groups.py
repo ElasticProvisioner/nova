@@ -131,7 +131,8 @@ class ServerGroupController(wsgi.Controller):
         return server_group
 
     @wsgi.expected_errors(404)
-    @validation.query_schema(schema.show_query)
+    @validation.query_schema(schema.show_query, '2.1', '2.101')
+    @validation.query_schema(schema.show_query_v2102, '2.102')
     @validation.response_body_schema(schema.show_response, '2.1', '2.12')
     @validation.response_body_schema(schema.show_response_v213, '2.13', '2.14')
     @validation.response_body_schema(schema.show_response_v215, '2.15', '2.63')

@@ -1,0 +1,10 @@
+---
+features:
+  - |
+    A new microversion has been added to allow fully-asynchronous attachment of
+    volumes to a server. Previously, calling ``POST
+    /servers/{server_id}/os-volume_attachments`` to attach a volume would
+    return HTTP 200 containing a ``volumeAttachment`` object, returning a
+    device name. With API version 2.101 this changes to HTTP 202. The reason
+    is, that the device name could not be assured by any of the current drivers
+    and reserving the device name could block the API thread for some time.

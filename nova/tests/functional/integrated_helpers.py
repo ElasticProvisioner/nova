@@ -334,7 +334,7 @@ class InstanceHelperMixin:
         return api.post_aggregate(body)['id']
 
     def _build_flavor(self, id=None, name=None, memory_mb=2048, vcpu=2,
-                      disk=10, ephemeral=10, swap=0, rxtx_factor=1.0,
+                      disk=10, ephemeral=10, swap=0, rxtx_factor=None,
                       is_public=True):
         """Build a request for the flavor create API.
 
@@ -353,7 +353,7 @@ class InstanceHelperMixin:
             name = ''.join(
                 random.choice(string.ascii_lowercase) for i in range(20))
 
-        return {
+        body = {
             "flavor": {
                 "id": id,
                 "name": name,
@@ -362,13 +362,17 @@ class InstanceHelperMixin:
                 "disk": disk,
                 "OS-FLV-EXT-DATA:ephemeral": ephemeral,
                 "swap": swap,
-                "rxtx_factor": rxtx_factor,
                 "os-flavor-access:is_public": is_public,
             }
         }
 
+        if rxtx_factor is not None:
+            body["rxtx_factor"] = rxtx_factor
+
+        return body
+
     def _create_flavor(self, id=None, name=None, memory_mb=2048, vcpu=2,
-                       disk=10, ephemeral=10, swap=0, rxtx_factor=1.0,
+                       disk=10, ephemeral=10, swap=0, rxtx_factor=None,
                        is_public=True, extra_spec=None):
         """Build and submit a request to the flavor create API.
 
@@ -585,14 +589,13 @@ class InstanceHelperMixin:
 
     def _attach_volume(self, server, volume_id):
         """attach a cinder volume to a server."""
-        attachment = self.api.post_server_volume(
+        self.api.post_server_volume(
             server['id'],
             {'volumeAttachment': {'volumeId': volume_id}}
         )
         self._wait_for_volume_attach(server['id'], volume_id)
         self.notifier.wait_for_versioned_notifications(
             'instance.volume_attach.end')
-        return attachment
 
     def _rebuild_server(self, server, image_uuid, expected_state='ACTIVE'):
         """Rebuild a server."""

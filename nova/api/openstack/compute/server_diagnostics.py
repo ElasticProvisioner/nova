@@ -35,7 +35,8 @@ class ServerDiagnosticsController(wsgi.Controller):
         self.compute_api = compute.API()
 
     @wsgi.expected_errors((400, 404, 409, 501))
-    @validation.query_schema(schema.index_query)
+    @validation.query_schema(schema.index_query, '2.1', '2.101')
+    @validation.query_schema(schema.index_query_v2102, '2.102')
     @validation.response_body_schema(schema.index_response, '2.1', '2.47')
     @validation.response_body_schema(schema.index_response_v248, '2.48')
     def index(self, req, server_id):

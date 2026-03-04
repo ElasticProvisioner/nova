@@ -1,0 +1,13 @@
+---
+deprecations:
+  - |
+    The ``[filter_scheduler] aggregate_image_properties_isolation_namespace``
+    and ``[filter_scheduler] aggregate_image_properties_isolation_separator``
+    config options have been deprecated for removal. These have been
+    effectively unusable since the 12.0.0 (Liberty) release, which removed the
+    ability for the ``AggregateImagePropertiesIsolation`` scheduler filter to
+    filter on any non-standard image metadata property. Users who require this
+    functionality should consider enforcing `aggregate isolation using
+    placement traits`__.
+
+    __ https://docs.openstack.org/nova/latest/reference/isolate-aggregates.html

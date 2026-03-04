@@ -12,6 +12,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import copy
+
 from nova.api.validation import parameter_types
 from nova.api.validation import response_types
 
@@ -22,7 +24,12 @@ create = {
             'type': 'object',
             'properties': {
                 'volume_type': {'type': 'string'},
-                'metadata': {'type': 'object'},
+                # This could probably be stricter but it's a deprecated API...
+                'metadata': {
+                    'type': 'object',
+                    'properties': {},
+                    'additionalProperties': True,
+                },
                 'snapshot_id': {'type': 'string'},
                 'size': {
                     'type': ['integer', 'string'],
@@ -53,13 +60,22 @@ index_query = {
     'additionalProperties': True
 }
 
+index_query_v275 = copy.deepcopy(index_query)
+index_query_v275['additionalProperties'] = False
+
 detail_query = index_query
+
+detail_query_v2102 = copy.deepcopy(detail_query)
+detail_query_v2102['additionalProperties'] = False
 
 show_query = {
     'type': 'object',
     'properties': {},
     'additionalProperties': True
 }
+
+show_query_v2102 = copy.deepcopy(show_query)
+show_query_v2102['additionalProperties'] = False
 
 _volume_response = {
     'type': 'object',

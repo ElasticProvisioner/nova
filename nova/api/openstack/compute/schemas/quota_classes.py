@@ -11,6 +11,7 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
+
 import copy
 
 from nova.api.openstack.compute.schemas import quota_sets
@@ -45,12 +46,14 @@ del update_v257['properties']['quota_class_set']['properties'][
 del update_v257['properties']['quota_class_set']['properties'][
     'injected_file_path_bytes']
 
-# TODO(stephenfin): Remove additionalProperties in a future API version
 show_query = {
     'type': 'object',
     'properties': {},
     'additionalProperties': True,
 }
+
+show_query_v2102 = copy.deepcopy(show_query)
+show_query_v2102['additionalProperties'] = False
 
 _quota_response = {
     'type': 'object',

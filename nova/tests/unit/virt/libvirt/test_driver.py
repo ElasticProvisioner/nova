@@ -13516,7 +13516,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         }
         dest_check_data = objects.LibvirtLiveMigrateData(filename='file')
         mock_find.return_value.UUIDString.return_value = uuids.secret
-        mock_find.return_value.value.return_value.decode.return_value = 'foo'
+        mock_find.return_value.value.return_value = b'foo'
 
         drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), False)
         drvr.check_can_live_migrate_source(self.context, instance,

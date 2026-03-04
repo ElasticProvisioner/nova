@@ -39,7 +39,7 @@ class FlavorManageSampleJsonTests(api_sample_base.ApiSampleTestBaseV21):
         self.assertEqual('', response.text)
 
 
-class FlavorManageSampleJsonTests2_55(FlavorManageSampleJsonTests):
+class FlavorManageSampleJsonTests255(FlavorManageSampleJsonTests):
     microversion = '2.55'
     scenarios = [('v2_55', {'api_major_version': 'v2.1'})]
 
@@ -48,6 +48,11 @@ class FlavorManageSampleJsonTests2_55(FlavorManageSampleJsonTests):
         self._verify_response("flavor-update-resp", {}, response, 200)
 
 
-class FlavorManageSampleJsonTests2_75(FlavorManageSampleJsonTests2_55):
+class FlavorManageSampleJsonTests275(FlavorManageSampleJsonTests255):
     microversion = '2.75'
     scenarios = [('v2_75', {'api_major_version': 'v2.1'})]
+
+
+class FlavorManageSampleJsonTests2102(FlavorManageSampleJsonTests255):
+    microversion = '2.102'
+    scenarios = [('v2_102', {'api_major_version': 'v2.1'})]

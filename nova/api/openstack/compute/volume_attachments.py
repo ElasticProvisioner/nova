@@ -16,6 +16,7 @@
 """The volume attachments extension."""
 
 from oslo_utils import strutils
+import webob
 from webob import exc
 
 from nova.api.openstack import api_version_request
@@ -179,14 +180,14 @@ class VolumeAttachmentController(wsgi.Controller):
             )
         }
 
-    # TODO(mriedem): This API should return a 202 instead of a 200 response.
     @wsgi.expected_errors((400, 403, 404, 409))
     @validation.schema(schema.create, '2.0', '2.48')
     @validation.schema(schema.create_v249, '2.49', '2.78')
     @validation.schema(schema.create_v279, '2.79')
     @validation.response_body_schema(schema.create_response, '2.0', '2.69')
     @validation.response_body_schema(schema.create_response_v270, '2.70', '2.78')  # noqa: E501
-    @validation.response_body_schema(schema.create_response_v279, '2.79')
+    @validation.response_body_schema(schema.create_response_v279, '2.79', '2.100')  # noqa: E501
+    @validation.response_body_schema(schema.create_response_v2101, '2.101')
     def create(self, req, server_id, body):
         """Attach a volume to an instance."""
         context = req.environ['nova.context']
@@ -207,12 +208,16 @@ class VolumeAttachmentController(wsgi.Controller):
             _check_request_version(
                 req, '2.20', 'attach_volume', server_id, instance.vm_state)
 
+        needs_device_returned = not api_version_request.is_supported(
+            req, '2.101')
+
         try:
             supports_multiattach = common.supports_multiattach_volume(req)
             device = self.compute_api.attach_volume(
                 context, instance, volume_id, device, tag=tag,
                 supports_multiattach=supports_multiattach,
-                delete_on_termination=delete_on_termination)
+                delete_on_termination=delete_on_termination,
+                needs_device_returned=needs_device_returned)
         except exception.VolumeNotFound as e:
             raise exc.HTTPNotFound(explanation=e.format_message())
         except (exception.InstanceIsLocked, exception.DevicePathInUse) as e:
@@ -231,6 +236,14 @@ class VolumeAttachmentController(wsgi.Controller):
             raise exc.HTTPBadRequest(explanation=e.format_message())
         except exception.TooManyDiskDevices as e:
             raise exc.HTTPForbidden(explanation=e.format_message())
+        except exception.ServiceTooOld:
+            raise exc.HTTPServiceUnavailable(explanation="nova-conductor is "
+                "not on the same version as nova-api and needs to be "
+                "upgraded.")
+
+        if not needs_device_returned:
+            # New return code starting from 2.101
+            return webob.Response(status_int=202)
 
         # The attach is async
         # NOTE(mriedem): It would be nice to use
@@ -246,8 +259,9 @@ class VolumeAttachmentController(wsgi.Controller):
             attachment['tag'] = tag
         if api_version_request.is_supported(req, '2.79'):
             attachment['delete_on_termination'] = delete_on_termination
-        # TODO(stephenfin): We forgot to apply 2.89 here. We should return
-        # 'bdm_uuid' and 'attachment_id' and stop returning 'id'
+        # NOTE(stephenfin): We forgot to apply 2.89 here, but starting with
+        # 2.101 we don't return a body anymore and thus it will stay this way
+        # forever.
         return {'volumeAttachment': attachment}
 
     def _update_volume_swap(self, req, instance, id, body):

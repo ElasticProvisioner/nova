@@ -375,6 +375,41 @@ class LibvirtLiveMigrateData(LiveMigrateData):
         return (
             self.has_vtpm and self.vtpm_secret_uuid and self.vtpm_secret_value)
 
+    @property
+    def vtpm_secret_value_bytes(self):
+        """Get the vTPM secret value as bytes after transport over RPC.
+
+        A vTPM secret is a Barbican secret of type "passphrase", which are
+        used for storing plain text secrets. A Barbican passphrase is an
+        unencrypted bytestring of data type: bytes.
+
+        The secret value is generated in nova/crypto.py as a random bytestring
+        that is subsequently base64 encoded using the standard Base64 alphabet.
+        It is then stored in Barbican as a passphrase.
+
+        The caller expects to receive bytes from here so we can convert the
+        value to the original data type: bytes with 'ascii' encoding.
+        """
+        return self.vtpm_secret_value.encode(encoding='ascii')
+
+    @vtpm_secret_value_bytes.setter
+    def vtpm_secret_value_bytes(self, value):
+        """Store the vTPM secret value as str for transport over RPC.
+
+        A vTPM secret is a Barbican secret of type "passphrase", which are
+        used for storing plain text secrets. A Barbican passphrase is an
+        unencrypted bytestring of data type: bytes.
+
+        The secret value is generated in nova/crypto.py as a random bytestring
+        that is subsequently base64 encoded using the standard Base64 alphabet.
+        It is then stored in Barbican as a passphrase.
+
+        We expect to receive bytes here and we can convert the value to a str
+        with 'ascii' encoding because we know it was base64 encoded using the
+        standard Base64 alphabet.
+        """
+        self.vtpm_secret_value = value.decode(encoding='ascii')
+
 
 # TODO(gmann): HyperV virt driver has been removed in Nova 29.0.0 (OpenStack
 # 2024.1) release but we kept this object for a couple of cycle. This can be

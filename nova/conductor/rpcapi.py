@@ -288,6 +288,7 @@ class ComputeTaskAPI(object):
     1.23 - Added revert_snapshot_based_resize()
     1.24 - Add reimage_boot_volume parameter to rebuild_instance()
     1.25 - Add target_state parameter to rebuild_instance()
+    1.26 - Added attach_volume()
     """
 
     def __init__(self):
@@ -494,3 +495,23 @@ class ComputeTaskAPI(object):
         kw = {'instance': instance, 'migration': migration}
         cctxt = self.client.prepare(version=version)
         cctxt.cast(ctxt, 'revert_snapshot_based_resize', **kw)
+
+    def attach_volume(self, ctxt, instance, volume, device, disk_bus,
+            device_type, tag=None, supports_multiattach=False,
+            delete_on_termination=False, do_cast=False):
+        version = '1.26'
+        if not self.client.can_send_version(version):
+            raise exception.ServiceTooOld(_('nova-conductor too old'))
+        kw = {'instance': instance, 'volume': volume, 'device': device,
+              'disk_bus': disk_bus, 'device_type': device_type, 'tag': tag,
+              'supports_multiattach': supports_multiattach,
+              'delete_on_termination': delete_on_termination}
+        if do_cast:
+            cctxt = self.client.prepare(version=version)
+            return cctxt.cast(ctxt, 'attach_volume', **kw)
+        # NOTE(jkulik): We call nova-compute's reserve_block_device_name(),
+        # which uses long_rpc_timeout and thus we need a long_rpc_timeout, too.
+        cctxt = self.client.prepare(
+            version=version, call_monitor_timeout=CONF.rpc_response_timeout,
+            timeout=CONF.long_rpc_timeout)
+        return cctxt.call(ctxt, 'attach_volume', **kw)

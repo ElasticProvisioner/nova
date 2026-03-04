@@ -717,6 +717,18 @@ flavor_is_public_query:
     ``f``, ``false``, ``off``, ``n`` and ``no`` are treated as ``False``
     (they are case-insensitive). If the value is ``None`` (case-insensitive)
     both public and private flavors will be listed in a single request.
+flavor_name_query:
+  description: |
+    Filters the response by a flavor name, as a string.  You can use regular expressions
+    in the query. For example, the ``?name=bob`` regular expression returns both bob
+    and bobb. If you must match on only bob, you can use a regular expression that
+    matches the syntax of the underlying database server that is implemented for Compute,
+    such as MySQL or PostgreSQL.
+  format: regexp
+  in: query
+  required: false
+  type: string
+  min_version: 2.102
 flavor_query:
   description: |
     Filters the response by a flavor, as a UUID. A flavor is a combination of memory,
@@ -3047,6 +3059,7 @@ flavor_disabled:
     This is an artifact of the legacy v2 API and will always be set to
     ``false``. There is currently no way to disable a flavor and set this to
     ``true``.
+  max_version: 2.101
 flavor_disk:
   in: body
   required: true
@@ -3209,6 +3222,7 @@ flavor_rxtx_factor:
   in: body
   required: true
   type: float
+  max_version: 2.101
 flavor_rxtx_factor_in:
   description: |
     The receive / transmit factor (as a float) that will be set on
@@ -3217,6 +3231,7 @@ flavor_rxtx_factor_in:
   in: body
   required: false
   type: float
+  max_version: 2.101
 flavor_server:
   description: |
     Before microversion 2.47 this contains the ID and links for the flavor

@@ -10,12 +10,15 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-# TODO(stephenfin): Remove additionalProperties in a future API version
+import copy
+
 index_query = {
     'type': 'object',
     'properties': {},
     'additionalProperties': True,
 }
+index_query_v2102 = copy.deepcopy(index_query)
+index_query_v2102['additionalProperties'] = False
 
 # NOTE(stephenfin): We could define all available response types for the
 # various virt drivers, but we'd need to be able to do this (accurately) for

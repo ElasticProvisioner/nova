@@ -188,3 +188,11 @@ class ComputeTaskAPI(object):
             self, ctxt, instance, migration):
         self.conductor_compute_rpcapi.revert_snapshot_based_resize(
             ctxt, instance, migration)
+
+    def attach_volume(self, ctxt, instance, volume, device, disk_bus,
+            device_type, tag=None, supports_multiattach=False,
+            delete_on_termination=False, do_cast=False):
+        return self.conductor_compute_rpcapi.attach_volume(ctxt, instance,
+            volume, device, disk_bus, device_type, tag=tag,
+            supports_multiattach=supports_multiattach,
+            delete_on_termination=delete_on_termination, do_cast=do_cast)

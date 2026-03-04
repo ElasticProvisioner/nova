@@ -106,7 +106,8 @@ class AvailabilityZoneController(wsgi.Controller):
         return {'availabilityZoneInfo': result}
 
     @wsgi.expected_errors(())
-    @validation.query_schema(schema.index_query)
+    @validation.query_schema(schema.index_query, '2.1', '2.101')
+    @validation.query_schema(schema.index_query_v2102, '2.102')
     @validation.response_body_schema(schema.index_response)
     def index(self, req):
         """Returns a summary list of availability zone."""
@@ -116,7 +117,8 @@ class AvailabilityZoneController(wsgi.Controller):
         return self._describe_availability_zones(context)
 
     @wsgi.expected_errors(())
-    @validation.query_schema(schema.detail_query)
+    @validation.query_schema(schema.detail_query, '2.1', '2.101')
+    @validation.query_schema(schema.detail_query_v2102, '2.102')
     @validation.response_body_schema(schema.detail_response)
     def detail(self, req):
         """Returns a detailed list of availability zone."""

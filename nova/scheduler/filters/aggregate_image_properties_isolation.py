@@ -15,7 +15,6 @@
 
 from oslo_log import log as logging
 
-
 import nova.conf
 from nova.scheduler import filters
 from nova.scheduler.filters import utils
@@ -41,6 +40,18 @@ class AggregateImagePropertiesIsolation(filters.BaseHostFilter):
             aggregate_image_properties_isolation_namespace)
         cfg_separator = (CONF.filter_scheduler.
             aggregate_image_properties_isolation_separator)
+
+        if cfg_namespace:
+            LOG.warning(
+                "It is no longer possible to filter on arbitrary image "
+                "metadata properties, which includes standard properties "
+                "prefixed with '[filter_scheduler] "
+                "aggregate_image_properties_isolation_namespace'. "
+                "You should unset this option and consider using the isolated "
+                "aggregate filtering feature instead. "
+                "See '[scheduler] enable_isolated_aggregate_filtering' for "
+                "more information."
+            )
 
         image_props = spec_obj.image.properties if spec_obj.image else {}
         metadata = utils.aggregate_metadata_get_by_host(host_state)

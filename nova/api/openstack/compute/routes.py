@@ -86,6 +86,7 @@ from nova.api.openstack.compute import versionsV21
 from nova.api.openstack.compute import virtual_interfaces
 from nova.api.openstack.compute import volume_attachments
 from nova.api.openstack.compute import volumes
+from nova.api.openstack.compute import volumes_boot
 from nova.api.openstack import wsgi
 from nova.api import wsgi as base_wsgi
 
@@ -352,6 +353,10 @@ virtual_interfaces_controller = functools.partial(_create_controller,
 
 volumes_controller = functools.partial(_create_controller,
     volumes.VolumeController, [])
+
+
+volumes_boot_controller = functools.partial(
+    _create_controller, volumes_boot.VolumesBootController, [])
 
 
 # NOTE(alex_xu): This is structure of this route list as below:
@@ -725,22 +730,20 @@ ROUTE_LIST = (
         'GET': [volumes_controller, 'show'],
         'DELETE': [volumes_controller, 'delete']
     }),
-    # NOTE: '/os-volumes_boot' is a clone of '/servers'. We may want to
-    # deprecate it in the future.
     ('/os-volumes_boot', {
-        'GET': [server_controller, 'index'],
-        'POST': [server_controller, 'create']
+        'GET': [volumes_boot_controller, 'index'],
+        'POST': [volumes_boot_controller, 'create']
     }),
     ('/os-volumes_boot/detail', {
-        'GET': [server_controller, 'detail']
+        'GET': [volumes_boot_controller, 'detail']
     }),
     ('/os-volumes_boot/{id}', {
-        'GET': [server_controller, 'show'],
-        'PUT': [server_controller, 'update'],
-        'DELETE': [server_controller, 'delete']
+        'GET': [volumes_boot_controller, 'show'],
+        'PUT': [volumes_boot_controller, 'update'],
+        'DELETE': [volumes_boot_controller, 'delete']
     }),
     ('/os-volumes_boot/{id}/action', {
-        'POST': [server_controller, 'action']
+        'POST': [volumes_boot_controller, 'action']
     }),
     ('/servers', {
         'GET': [server_controller, 'index'],

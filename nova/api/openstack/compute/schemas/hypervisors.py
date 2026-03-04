@@ -130,6 +130,7 @@ _hypervisor_detail_response = {
                 'id': {'type': 'integer'},
             },
             'required': ['disabled_reason', 'host', 'id'],
+            'additionalProperties': False,
         },
         'state': {'enum': ['up', 'down']},
         'status': {'enum': ['enabled', 'disabled']},

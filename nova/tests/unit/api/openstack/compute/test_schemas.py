@@ -43,7 +43,7 @@ class SchemaTest(test.NoDBTestCase):
                 )
                 invalid_schemas.add(func.__qualname__)
 
-        def _validate_func(func, method, validated):
+        def _validate_func(func, method):
             if method in ("POST", "PUT", "PATCH"):
                 # request body validation
                 if not hasattr(func, 'request_body_schemas'):
@@ -54,15 +54,14 @@ class SchemaTest(test.NoDBTestCase):
             elif method in ("GET",):
                 # request query string validation
                 if not hasattr(func, 'request_query_schemas'):
-                    missing_request_schemas.add(func.__qualname__)
+                    missing_query_schemas.add(func.__qualname__)
                 else:
                     for schema, _, _ in func.request_query_schemas._schemas:
                         _validate_schema(func, schema)
 
             # response body validation
             if not hasattr(func, 'response_body_schemas'):
-                if validated:
-                    missing_response_schemas.add(func.__qualname__)
+                missing_response_schemas.add(func.__qualname__)
             else:
                 for schema, _, _ in func.response_body_schemas._schemas:
                     _validate_schema(func, schema)
@@ -73,7 +72,13 @@ class SchemaTest(test.NoDBTestCase):
 
             controller = route.defaults['controller']
 
-            validated = getattr(controller.controller, '_validated', False)
+            if not hasattr(controller.controller, '_validated'):
+                raise Exception(
+                    f'Found unvalidated controller: '
+                    f'{controller.controller.__class__.__qualname__}. '
+                    f'All controllers must be validated. Add the validated '
+                    f'decorator plus other required schema decorators.'
+                )
 
             # NOTE: This is effectively a reimplementation of
             # 'routes.route.Route.make_full_route' that uses OpenAPI-compatible
@@ -111,11 +116,11 @@ class SchemaTest(test.NoDBTestCase):
                 ) in wsgi_actions:
                     func = controller.wsgi_actions[wsgi_action]
                     # method will always be POST for actions
-                    _validate_func(func, method, validated)
+                    _validate_func(func, method)
             else:
                 # body validation
                 func = getattr(controller.controller, action)
-                _validate_func(func, method, validated)
+                _validate_func(func, method)
 
         if missing_request_schemas:
             raise test.TestingException(

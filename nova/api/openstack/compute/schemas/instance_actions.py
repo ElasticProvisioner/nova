@@ -49,6 +49,9 @@ show_query = {
     'additionalProperties': True,
 }
 
+show_query_v2102 = copy.deepcopy(show_query)
+show_query_v2102['additionalProperties'] = False
+
 index_response = {
     'type': 'object',
     'properties': {

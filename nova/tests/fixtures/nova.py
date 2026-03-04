@@ -1199,14 +1199,17 @@ class IsolatedExecutorFixture(fixtures.Fixture):
         assert utils.SCATTER_GATHER_EXECUTOR is None
         assert utils.DEFAULT_EXECUTOR is None
         assert utils.CACHE_IMAGES_EXECUTOR is None
+        assert utils.LONG_TASK_EXECUTOR is None
 
         origi_get_scatter_gather = utils.get_scatter_gather_executor
         origi_default_executor = utils._get_default_executor
         origi_get_cache_images_executor = utils.get_cache_images_executor
+        origi_get_long_task_executor = utils.get_long_task_executor
 
         self.executor = None
         self.scatter_gather_executor = None
         self.cache_images_executor = None
+        self.long_task_executor = None
 
         def _get_default_executor():
             self.executor = origi_default_executor()
@@ -1247,12 +1250,26 @@ class IsolatedExecutorFixture(fixtures.Fixture):
         self.addCleanup(
             lambda: self.do_cleanup_executor(self.cache_images_executor))
 
+        def _get_long_task_executor(max_workers):
+            self.long_task_executor = origi_get_long_task_executor(max_workers)
+            self.long_task_executor.name = (
+                f"{self.test_case_id}.long_task")
+            return self.long_task_executor
+
+        self.useFixture(fixtures.MonkeyPatch(
+            'nova.utils.get_long_task_executor',
+            _get_long_task_executor))
+
+        self.addCleanup(
+            lambda: self.do_cleanup_executor(self.long_task_executor))
+
         self.addCleanup(self.reset_globals)
 
     def reset_globals(self):
         utils.SCATTER_GATHER_EXECUTOR = None
         utils.DEFAULT_EXECUTOR = None
         utils.CACHE_IMAGES_EXECUTOR = None
+        utils.LONG_TASK_EXECUTOR = None
 
     def do_cleanup_executor(self, executor):
         # NOTE(gibi): we cannot rely on utils.concurrency_mode_threading

@@ -21,8 +21,7 @@ class ViewBuilder(common.ViewBuilder):
 
     _collection_name = "flavors"
 
-    def basic(self, request, flavor, include_description=False,
-              include_extra_specs=False):
+    def basic(self, request, flavor, include_extra_specs=False):
         # include_extra_specs is placeholder param which is not used in
         # this method as basic() method is used by index() (GET /flavors)
         # which does not return those keys in response.
@@ -36,13 +35,12 @@ class ViewBuilder(common.ViewBuilder):
             },
         }
 
-        if include_description:
+        if api_version_request.is_supported(request, '2.55'):
             flavor_dict['flavor']['description'] = flavor.description
 
         return flavor_dict
 
-    def show(self, request, flavor, include_description=False,
-             include_extra_specs=False):
+    def show(self, request, flavor, include_extra_specs=False):
         flavor_dict = {
             "flavor": {
                 "id": flavor["flavorid"],
@@ -61,7 +59,7 @@ class ViewBuilder(common.ViewBuilder):
             },
         }
 
-        if include_description:
+        if api_version_request.is_supported(request, '2.55'):
             flavor_dict['flavor']['description'] = flavor.description
 
         if include_extra_specs:
@@ -70,25 +68,26 @@ class ViewBuilder(common.ViewBuilder):
         if api_version_request.is_supported(request, '2.75'):
             flavor_dict['flavor']['swap'] = flavor["swap"] or 0
 
+        if api_version_request.is_supported(request, '2.102'):
+            del flavor_dict['flavor']['OS-FLV-DISABLED:disabled']
+            del flavor_dict['flavor']['rxtx_factor']
+
         return flavor_dict
 
     def index(self, request, flavors):
         """Return the 'index' view of flavors."""
         coll_name = self._collection_name
-        include_description = api_version_request.is_supported(request, '2.55')
-        return self._list_view(self.basic, request, flavors, coll_name,
-                               include_description=include_description)
+        return self._list_view(self.basic, request, flavors, coll_name)
 
     def detail(self, request, flavors, include_extra_specs=False):
         """Return the 'detail' view of flavors."""
         coll_name = self._collection_name + '/detail'
-        include_description = api_version_request.is_supported(request, '2.55')
         return self._list_view(self.show, request, flavors, coll_name,
-                               include_description=include_description,
                                include_extra_specs=include_extra_specs)
 
-    def _list_view(self, func, request, flavors, coll_name,
-                   include_description=False, include_extra_specs=False):
+    def _list_view(
+        self, func, request, flavors, coll_name, include_extra_specs=False
+    ):
         """Provide a view for a list of flavors.
 
         :param func: Function used to format the flavor data
@@ -96,21 +95,17 @@ class ViewBuilder(common.ViewBuilder):
         :param flavors: List of flavors in dictionary format
         :param coll_name: Name of collection, used to generate the next link
                           for a pagination query
-        :param include_description: If the flavor.description should be
-                                    included in the response dict.
         :param include_extra_specs: If the flavor.extra_specs should be
                                     included in the response dict.
 
         :returns: Flavor reply data in dictionary format
         """
-        flavor_list = [func(request, flavor, include_description,
-                            include_extra_specs)["flavor"]
-                       for flavor in flavors]
-        flavors_links = self._get_collection_links(request,
-                                                   flavors,
-                                                   coll_name,
-                                                   "flavorid")
-        flavors_dict = dict(flavors=flavor_list)
+        flavor_list = [
+            func(request, flavor, include_extra_specs)["flavor"]
+            for flavor in flavors]
+        flavors_links = self._get_collection_links(
+            request, flavors, coll_name, "flavorid")
+        flavors_dict = {"flavors": flavor_list}
 
         if flavors_links:
             flavors_dict["flavors_links"] = flavors_links

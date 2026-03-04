@@ -17,6 +17,23 @@ import copy
 
 from nova.api.validation import parameter_types
 
+index_query = {
+    'type': 'object',
+    'properties': {},
+    'additionalProperties': True,
+}
+
+index_query_v2102 = copy.deepcopy(index_query)
+index_query_v2102['additionalProperties'] = False
+
+show_query = {
+    'type': 'object',
+    'properties': {},
+    'additionalProperties': True,
+}
+
+show_query_v2102 = copy.deepcopy(show_query)
+show_query_v2102['additionalProperties'] = False
 
 force_complete = {
     'type': 'object',
@@ -27,20 +44,6 @@ force_complete = {
     },
     'required': ['force_complete'],
     'additionalProperties': False,
-}
-
-# TODO(stephenfin): Remove additionalProperties in a future API version
-index_query = {
-    'type': 'object',
-    'properties': {},
-    'additionalProperties': True,
-}
-
-# TODO(stephenfin): Remove additionalProperties in a future API version
-show_query = {
-    'type': 'object',
-    'properties': {},
-    'additionalProperties': True,
 }
 
 force_complete_response = {

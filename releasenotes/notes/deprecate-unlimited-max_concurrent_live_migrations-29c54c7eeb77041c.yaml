@@ -18,6 +18,32 @@ upgrade:
     higher value explicitly before the upgrade. Please read the
     `concurrency <https://docs.openstack.org/nova/latest/admin/concurrency.html>`__
     guide for more details.
+  - |
+    The meaning of the 0 value of the config option
+    ``[DEFAULT]max_concurrent_builds`` has been changed. In the past
+    it meant "unlimited" but actually it was limited by the oslo.messaging's
+    ``executor_thread_pool_size`` config option. For eventlet mode "unlimited"
+    now means 1000 concurrent builds. For the native threading mode it is
+    now reduced to 10 native threads. Please also read the `concurrency
+    <https://docs.openstack.org/nova/latest/admin/concurrency.html>`__
+    guide for more details.
+  - |
+    The meaning of the 0 value of the config option
+    ``[DEFAULT]max_concurrent_snapshots`` has been changed. In the past
+    it meant "unlimited" but actually it was limited by the oslo.messaging's
+    ``executor_thread_pool_size`` config option. For eventlet mode "unlimited"
+    now means 1000 concurrent snapshots. For the native threading mode it is
+    now reduced to 5 native threads. Please also read the `concurrency
+    <https://docs.openstack.org/nova/latest/admin/concurrency.html>`__
+    guide for more details.
+  - |
+    In native threading mode the limit expressed by
+    ``[DEFAULT]max_concurrent_builds`` and
+    ``[DEFAULT]max_concurrent_snapshots`` configuration options are shared
+    across the two operation types as they are executed by the same Executor.
+    Therefore the two config options need to be set to the same value. If not
+    then nova will use the bigger value as the shared limit. The shared limit
+    also means that one operation type can consume the whole limit.
 deprecations:
   - |
     The possible 0 value of the configuration option
@@ -26,3 +52,11 @@ deprecations:
     default value, 1, of this config option. If more performant live migration
     is needed, use the ``live_migration_parallel_connections`` config option
     instead.
+  - |
+    The possible 0 value of the configuration option
+    ``[DEFAULT]max_concurrent_builds`` is deprecated and will be
+    removed in a future release.
+  - |
+    The possible 0 value of the configuration option
+    ``[DEFAULT]max_concurrent_snapshots`` is deprecated and will be
+    removed in a future release.

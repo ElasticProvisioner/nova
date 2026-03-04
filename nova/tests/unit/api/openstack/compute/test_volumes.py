@@ -77,8 +77,7 @@ class BootFromVolumeTest(test.TestCase):
                         delete_on_termination=False,
                         )]
                 ))
-        # FIXME(stephenfin): Use /servers instead?
-        req = fakes.HTTPRequest.blank('/v2.1/os-volumes_boot')
+        req = fakes.HTTPRequest.blank('/v2.1/servers')
         req.method = 'POST'
         req.body = jsonutils.dump_as_bytes(body)
         req.headers['content-type'] = 'application/json'
@@ -106,8 +105,7 @@ class BootFromVolumeTest(test.TestCase):
                         delete_on_termination=False,
                         )]
                 ))
-        # FIXME(stephenfin): Use /servers instead?
-        req = fakes.HTTPRequest.blank('/v2.1/os-volumes_boot')
+        req = fakes.HTTPRequest.blank('/v2.1/servers')
         req.method = 'POST'
         req.body = jsonutils.dump_as_bytes(body)
         req.headers['content-type'] = 'application/json'
@@ -140,8 +138,7 @@ class BootFromVolumeTest(test.TestCase):
                         delete_on_termination=False,
                         )]
                 ))
-        req = fakes.HTTPRequest.blank('/v2/%s/os-volumes_boot' %
-                                      fakes.FAKE_PROJECT_ID)
+        req = fakes.HTTPRequest.blank('/v2/servers')
         req.method = 'POST'
         req.body = jsonutils.dump_as_bytes(body)
         req.headers['content-type'] = 'application/json'

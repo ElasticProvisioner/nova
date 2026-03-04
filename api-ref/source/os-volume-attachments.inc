@@ -60,7 +60,7 @@ Attach a volume to an instance
 
 Attach a volume to an instance.
 
-Normal response codes: 200
+Normal response codes: 200 (microversions 2.0 - 2.100), 202 (microversion 2.101 - )
 
 Error response codes: badRequest(400), unauthorized(401), forbidden(403), itemNotFound(404), conflict(409)
 
@@ -105,6 +105,10 @@ Request
 
 Response
 --------
+
+Starting with microversion 2.101, there is no body content for the response of
+a successful POST operation. Until microversion 2.100, a response contains the
+following parameters.
 
 .. rest_parameters:: parameters.yaml
 

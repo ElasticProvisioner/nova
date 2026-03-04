@@ -128,6 +128,14 @@ class AvailabilityZoneApiTestV21(test.NoDBTestCase):
         self.assertFalse(zones[1]['zoneState']['available'])
         self.assertIsNone(zones[1]['hosts'])
 
+    def test_availability_zone_index_invalid_query_params(self):
+        req = fakes.HTTPRequest.blank('?invalid=1', version='2.102')
+        self.assertRaises(
+            exception.ValidationError,
+            self.controller.index,
+            req,
+        )
+
     def test_availability_zone_detail(self):
         req = fakes.HTTPRequest.blank('')
         resp_dict = self.controller.detail(req)
@@ -190,6 +198,14 @@ class AvailabilityZoneApiTestV21(test.NoDBTestCase):
 
         self.assertThat(resp_dict,
                         matchers.DictMatches(expected_response))
+
+    def test_availability_zone_detail_invalid_query_params(self):
+        req = fakes.HTTPRequest.blank('?invalid=1', version='2.102')
+        self.assertRaises(
+            exception.ValidationError,
+            self.controller.index,
+            req,
+        )
 
 
 class ServersControllerCreateTestV21(test.TestCase):

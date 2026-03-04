@@ -10,19 +10,23 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-# TODO(stephenfin): Remove additionalProperties in a future API version
+import copy
+
 index_query = {
     'type': 'object',
     'properties': {},
     'additionalProperties': True,
 }
+index_query_v2102 = copy.deepcopy(index_query)
+index_query_v2102['additionalProperties'] = False
 
-# TODO(stephenfin): Remove additionalProperties in a future API version
 show_query = {
     'type': 'object',
     'properties': {},
     'additionalProperties': True,
 }
+show_query_v2102 = copy.deepcopy(show_query)
+show_query_v2102['additionalProperties'] = False
 
 _extension_obj = {
     'type': 'object',

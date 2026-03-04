@@ -121,3 +121,41 @@ class ProcessSortParamTestCase(test.TestCase):
             self.assertRaises(
                 exception.InvalidInput,
                 utils.process_sort_params, ['key'], dirs)
+
+
+class TestGetRegexOps(test.TestCase):
+    def test_get_regexp_op_for_database_sqlite(self):
+        filter, op = utils.get_regexp_ops('sqlite:///')
+        self.assertEqual('|', filter('|'))
+        self.assertEqual('REGEXP', op)
+
+    def test_get_regexp_op_for_database_mysql(self):
+        filter, op = utils.get_regexp_ops('mysql+pymysql://root@localhost')
+        self.assertEqual('\\|', filter('|'))
+        self.assertEqual('REGEXP', op)
+
+    def test_get_regexp_op_for_database_postgresql(self):
+        filter, op = utils.get_regexp_ops('postgresql://localhost')
+        self.assertEqual('|', filter('|'))
+        self.assertEqual('~', op)
+
+    def test_get_regexp_op_for_database_unknown(self):
+        filter, op = utils.get_regexp_ops('notdb:///')
+        self.assertEqual('|', filter('|'))
+        self.assertEqual('LIKE', op)
+
+    def test_replace_sub_expression(self):
+        ret = utils._safe_regex_mysql('|')
+        self.assertEqual('\\|', ret)
+
+        ret = utils._safe_regex_mysql('||')
+        self.assertEqual('\\|\\|', ret)
+
+        ret = utils._safe_regex_mysql('a||')
+        self.assertEqual('a\\|\\|', ret)
+
+        ret = utils._safe_regex_mysql('|a|')
+        self.assertEqual('\\|a\\|', ret)
+
+        ret = utils._safe_regex_mysql('||a')
+        self.assertEqual('\\|\\|a', ret)

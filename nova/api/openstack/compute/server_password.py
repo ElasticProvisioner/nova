@@ -33,7 +33,8 @@ class ServerPasswordController(wsgi.Controller):
         self.compute_api = compute.API()
 
     @wsgi.expected_errors(404)
-    @validation.query_schema(schema.index_query)
+    @validation.query_schema(schema.index_query, '2.1', '2.101')
+    @validation.query_schema(schema.index_query_v2102, '2.102')
     @validation.response_body_schema(schema.index_response)
     def index(self, req, server_id):
         context = req.environ['nova.context']

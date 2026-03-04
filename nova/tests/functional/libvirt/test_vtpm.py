@@ -563,6 +563,9 @@ class VTPMServersTest(base.LibvirtMigrationMixin, base.ServersTestBase):
         # Try to recover the instance by hard-rebooting it.
         self._reboot_server(self.server, hard=True)
 
+        # The libvirt secret should have been re-created.
+        self._assert_libvirt_has_secret(self.src, self.server['id'])
+
         # This time the live migration should work because the libvirt secret
         # should have been re-created by the hard reboot.
         self._live_migrate(self.server, migration_expected_state='completed',
@@ -616,8 +619,19 @@ class VTPMServersTest(base.LibvirtMigrationMixin, base.ServersTestBase):
         # After the live migration fails, we should still have a secret in the
         # key manager service.
         self.assertInstanceHasSecret(self.server)
+
+        # The instance should be on the source host.
+        instances = self.src.driver._host.list_instance_domains()
+        self.assertEqual(1, len(instances))
+        self.assertEqual(self.server['id'], instances[0].UUIDString())
+
         # We should have a libvirt secret on the source host.
         self._assert_libvirt_has_secret(self.src, self.server['id'])
+
+        # There should be no instance on the destination host.
+        instances = self.dest.driver._host.list_instance_domains()
+        self.assertEqual(0, len(instances))
+
         # And no libvirt secret on the destination host.
         self._assert_libvirt_secret_missing(self.dest, self.server['id'])
 

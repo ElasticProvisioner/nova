@@ -278,6 +278,14 @@ REST_API_VERSION_HISTORY = """REST API Version History:
              ``GET /servers/{server_id}``, ``GET /servers/detail``,
              ``PUT /servers/{server_id}`` and
              ``POST /server/{server_id}/action`` (rebuild) responses.
+    * 2.101 - Attaching a volume via
+              ``POST /servers/{server_id}/os-volume_attachments`` returns HTTP
+              202 Accepted instead of HTTP 200 and a volumeAttachment response.
+    * 2.102 - Add support for filtering flavors by name. Remove the deprecated
+              ``rxtx_factor`` and ``OS-FLV-DISABLED:disabled`` fields and
+              filters from various flavors APIs and restrict additional query
+              string parameters for all APIs.
+    * 2.103 - Remove the ``/os-volumes_boot`` API
 """
 
 # The minimum and maximum versions of the API supported
@@ -286,7 +294,7 @@ REST_API_VERSION_HISTORY = """REST API Version History:
 # Note(cyeoh): This only applies for the v2.1 API once microversions
 # support is fully merged. It does not affect the V2 API.
 _MIN_API_VERSION = '2.1'
-_MAX_API_VERSION = '2.100'
+_MAX_API_VERSION = '2.103'
 DEFAULT_API_VERSION = _MIN_API_VERSION
 
 # Almost all proxy APIs which are related to network, images and baremetal

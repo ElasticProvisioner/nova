@@ -16,7 +16,6 @@ import copy
 
 from nova.api.validation import parameter_types
 
-
 add_tenant_access = {
     'type': 'object',
     'properties': {
@@ -55,12 +54,14 @@ remove_tenant_access = {
     'additionalProperties': False,
 }
 
-# TODO(stephenfin): Remove additionalProperties in a future API version
 index_query = {
     'type': 'object',
     'properties': {},
     'additionalProperties': True,
 }
+
+index_query_v2102 = copy.deepcopy(index_query)
+index_query_v2102['additionalProperties'] = False
 
 _common_response = {
     'type': 'object',

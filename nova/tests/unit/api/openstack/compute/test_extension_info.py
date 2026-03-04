@@ -15,6 +15,7 @@
 import webob
 
 from nova.api.openstack.compute import extension_info
+from nova import exception
 from nova import test
 from nova.tests.unit.api.openstack import fakes
 
@@ -25,7 +26,24 @@ class ExtensionInfoV21Test(test.NoDBTestCase):
         super(ExtensionInfoV21Test, self).setUp()
         self.controller = extension_info.ExtensionInfoController()
 
-    def test_extension_info_show_servers_not_present(self):
+    def test_extension_info_index_invalid_query_params(self):
+        req = fakes.HTTPRequest.blank('?invalid=1', version='2.102')
+        self.assertRaises(
+            exception.ValidationError,
+            self.controller.index,
+            req,
+        )
+
+    def test_extension_info_show_extension_not_present(self):
         req = fakes.HTTPRequest.blank('/extensions/servers')
         self.assertRaises(webob.exc.HTTPNotFound, self.controller.show,
                           req, 'servers')
+
+    def test_extension_info_show_invalid_query_params(self):
+        req = fakes.HTTPRequest.blank('?invalid=1', version='2.102')
+        self.assertRaises(
+            exception.ValidationError,
+            self.controller.show,
+            req,
+            'servers',
+        )

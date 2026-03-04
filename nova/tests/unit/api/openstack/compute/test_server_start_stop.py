@@ -43,7 +43,7 @@ class ServerStartStopTestV21(test.TestCase):
     @mock.patch.object(compute_api.API, 'start')
     def test_start(self, start_mock):
         body = {'os-start': None}
-        self.controller._start_server(self.req, uuids.instance, body=body)
+        self.controller._start(self.req, uuids.instance, body=body)
         start_mock.assert_called_once_with(mock.ANY, mock.ANY)
 
     @mock.patch.object(compute_api.API, 'start',
@@ -52,7 +52,7 @@ class ServerStartStopTestV21(test.TestCase):
     def test_start_not_ready(self, start_mock):
         body = {'os-start': None}
         self.assertRaises(webob.exc.HTTPConflict,
-            self.controller._start_server, self.req, uuids.instance, body=body)
+            self.controller._start, self.req, uuids.instance, body=body)
 
     @mock.patch.object(compute_api.API, 'start',
                        side_effect=exception.InstanceIsLocked(
@@ -60,7 +60,7 @@ class ServerStartStopTestV21(test.TestCase):
     def test_start_locked_server(self, start_mock):
         body = {'os-start': None}
         self.assertRaises(webob.exc.HTTPConflict,
-            self.controller._start_server, self.req, uuids.instance, body=body)
+            self.controller._start, self.req, uuids.instance, body=body)
 
     @mock.patch.object(compute_api.API, 'start',
                        side_effect=exception.InstanceIsLocked(
@@ -68,13 +68,13 @@ class ServerStartStopTestV21(test.TestCase):
     def test_start_invalid_state(self, start_mock):
         body = {'os-start': None}
         ex = self.assertRaises(webob.exc.HTTPConflict,
-            self.controller._start_server, self.req, uuids.instance, body=body)
+            self.controller._start, self.req, uuids.instance, body=body)
         self.assertIn('is locked', str(ex))
 
     @mock.patch.object(compute_api.API, 'stop')
     def test_stop(self, stop_mock):
         body = {'os-stop': None}
-        self.controller._stop_server(self.req, uuids.instance, body=body)
+        self.controller._stop(self.req, uuids.instance, body=body)
         stop_mock.assert_called_once_with(mock.ANY, mock.ANY)
 
     @mock.patch.object(compute_api.API, 'stop',
@@ -83,7 +83,7 @@ class ServerStartStopTestV21(test.TestCase):
     def test_stop_not_ready(self, stop_mock):
         body = {'os-stop': None}
         self.assertRaises(webob.exc.HTTPConflict,
-            self.controller._stop_server, self.req, uuids.instance, body=body)
+            self.controller._stop, self.req, uuids.instance, body=body)
 
     @mock.patch.object(compute_api.API, 'stop',
                        side_effect=exception.InstanceIsLocked(
@@ -91,7 +91,7 @@ class ServerStartStopTestV21(test.TestCase):
     def test_stop_locked_server(self, stop_mock):
         body = {'os-stop': None}
         ex = self.assertRaises(webob.exc.HTTPConflict,
-            self.controller._stop_server, self.req, uuids.instance, body=body)
+            self.controller._stop, self.req, uuids.instance, body=body)
         self.assertIn('is locked', str(ex))
 
     @mock.patch.object(compute_api.API, 'stop',
@@ -100,7 +100,7 @@ class ServerStartStopTestV21(test.TestCase):
     def test_stop_invalid_state(self, stop_mock):
         body = {'os-stop': None}
         self.assertRaises(webob.exc.HTTPConflict,
-            self.controller._stop_server, self.req, uuids.instance, body=body)
+            self.controller._stop, self.req, uuids.instance, body=body)
 
     @mock.patch.object(db, 'instance_get_by_uuid',
                        side_effect=exception.InstanceNotFound(
@@ -108,7 +108,7 @@ class ServerStartStopTestV21(test.TestCase):
     def test_start_with_bogus_id(self, get_mock):
         body = {'os-start': None}
         self.assertRaises(webob.exc.HTTPNotFound,
-            self.controller._start_server, self.req, uuids.instance, body=body)
+            self.controller._start, self.req, uuids.instance, body=body)
 
     @mock.patch.object(db, 'instance_get_by_uuid',
                        side_effect=exception.InstanceNotFound(
@@ -116,4 +116,4 @@ class ServerStartStopTestV21(test.TestCase):
     def test_stop_with_bogus_id(self, get_mock):
         body = {'os-stop': None}
         self.assertRaises(webob.exc.HTTPNotFound,
-            self.controller._stop_server, self.req, uuids.instance, body=body)
+            self.controller._stop, self.req, uuids.instance, body=body)

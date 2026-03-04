@@ -89,35 +89,33 @@ create_v292['properties']['keypair']['properties']['name'] = (
     parameter_types.keypair_name_special_chars_v292)
 create_v292['properties']['keypair']['required'] = ['name', 'public_key']
 
-index_query_schema_v20 = {
+index_query_v20 = {
     'type': 'object',
     'properties': {},
     'additionalProperties': True
 }
-
-index_query_schema_v210 = {
+index_query_v210 = {
     'type': 'object',
     'properties': {
         'user_id': parameter_types.multi_params({'type': 'string'})
     },
     'additionalProperties': True
 }
-
-index_query_schema_v235 = copy.deepcopy(index_query_schema_v210)
-index_query_schema_v235['properties'].update(
+index_query_v235 = copy.deepcopy(index_query_v210)
+index_query_v235['properties'].update(
     parameter_types.pagination_parameters)
+index_query_v275 = copy.deepcopy(index_query_v235)
+index_query_v275['additionalProperties'] = False
 
-show_query_schema_v20 = index_query_schema_v20
-show_query_schema_v210 = index_query_schema_v210
-delete_query_schema_v20 = index_query_schema_v20
-delete_query_schema_v210 = index_query_schema_v210
+show_query_v20 = index_query_v20
+show_query_v210 = index_query_v210
+show_query_v275 = copy.deepcopy(show_query_v210)
+show_query_v275['additionalProperties'] = False
 
-index_query_schema_v275 = copy.deepcopy(index_query_schema_v235)
-index_query_schema_v275['additionalProperties'] = False
-show_query_schema_v275 = copy.deepcopy(show_query_schema_v210)
-show_query_schema_v275['additionalProperties'] = False
-delete_query_schema_v275 = copy.deepcopy(delete_query_schema_v210)
-delete_query_schema_v275['additionalProperties'] = False
+delete_query_v20 = index_query_v20
+delete_query_v210 = index_query_v210
+delete_query_v275 = copy.deepcopy(delete_query_v210)
+delete_query_v275['additionalProperties'] = False
 
 create_response = {
     'type': 'object',

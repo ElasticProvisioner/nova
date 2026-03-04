@@ -1633,3 +1633,43 @@ def delete_arqs_if_needed(context, instance, arq_uuids=None):
               {'instance': instance.uuid,
                'uuid': arq_uuids})
         cyclient.delete_arqs_by_uuid(arq_uuids)
+
+
+def check_attach_and_reserve_volume(context, volume_api, volume, instance,
+                                    bdm, supports_multiattach=False,
+                                    validate_az=True):
+    """Perform checks against the instance and volume before attaching.
+
+    If validation succeeds, the bdm is updated with an attachment_id which
+    effectively reserves it during the attach process in cinder.
+
+    :param context: nova auth RequestContext
+    :param volume_api: cinder API object
+    :param volume: volume dict from cinder
+    :param instance: Instance object
+    :param bdm: BlockDeviceMapping object
+    :param supports_multiattach: True if the request supports multiattach
+        volumes, i.e. microversion >= 2.60, False otherwise
+    :param validate_az: True if the instance and volume availability zones
+        should be validated for cross_az_attach, False to not validate AZ
+    """
+    volume_id = volume['id']
+    if validate_az:
+        volume_api.check_availability_zone(context, volume,
+                                                instance=instance)
+    # If volume.multiattach=True and the microversion to
+    # support multiattach is not used, fail the request.
+    if volume['multiattach'] and not supports_multiattach:
+        raise exception.MultiattachNotSupportedOldMicroversion()
+
+    attachment_id = volume_api.attachment_create(
+        context, volume_id, instance.uuid)['id']
+    bdm.attachment_id = attachment_id
+    # NOTE(ildikov): In case of boot from volume the BDM at this
+    # point is not yet created in a cell database, so we can't
+    # call save().  When attaching a volume to an existing
+    # instance, the instance is already in a cell and the BDM has
+    # been created in that same cell so updating here in that case
+    # is "ok".
+    if bdm.obj_attr_is_set('id'):
+        bdm.save()

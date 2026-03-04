@@ -605,15 +605,25 @@ def _flavor_get_all_from_db(context, inactive, filters, sort_key, sort_dir,
 
     if 'min_memory_mb' in filters:
         query = query.filter(
-                api_models.Flavors.memory_mb >= filters['min_memory_mb'])
+            api_models.Flavors.memory_mb >= filters['min_memory_mb'])
 
     if 'min_root_gb' in filters:
         query = query.filter(
-                api_models.Flavors.root_gb >= filters['min_root_gb'])
+            api_models.Flavors.root_gb >= filters['min_root_gb'])
 
     if 'disabled' in filters:
         query = query.filter(
-               api_models.Flavors.disabled == filters['disabled'])
+           api_models.Flavors.disabled == filters['disabled'])
+
+    if 'name' in filters:
+        # name can be a regex
+        safe_regex_filter, db_regexp_op = db_utils.get_regexp_ops(
+            CONF.database.connection)
+        query = query.filter(
+            api_models.Flavors.name.op(db_regexp_op)(
+                safe_regex_filter(filters['name'])
+            )
+        )
 
     if 'is_public' in filters and filters['is_public'] is not None:
         the_filter = [api_models.Flavors.is_public == filters['is_public']]
@@ -624,6 +634,7 @@ def _flavor_get_all_from_db(context, inactive, filters, sort_key, sort_dir,
             query = query.filter(sa.or_(*the_filter))
         else:
             query = query.filter(the_filter[0])
+
     marker_row = None
     if marker is not None:
         marker_row = Flavor._flavor_get_query_from_db(context).\

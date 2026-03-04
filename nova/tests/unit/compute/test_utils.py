@@ -53,6 +53,7 @@ from nova.tests.unit import fake_instance
 from nova.tests.unit import fake_network
 from nova.tests.unit import fake_server_actions
 from nova.tests.unit.objects import test_flavor
+from nova.volume import cinder
 
 
 FAKE_IMAGE_REF = uuids.image_ref
@@ -1779,3 +1780,23 @@ class AcceleratorRequestTestCase(test.NoDBTestCase):
         compute_utils.delete_arqs_if_needed(self.context, instance, arq_uuids)
         mock_del_inst.assert_called_once_with(instance.uuid)
         mock_del_uuid.assert_called_once_with(arq_uuids)
+
+
+class CheckAttachAndReserverVolumeTestCase(test.NoDBTestCase):
+    def setUp(self):
+        super(CheckAttachAndReserverVolumeTestCase, self).setUp()
+        self.context = context.get_admin_context()
+
+    def test_check_attach_and_reserve_volume_multiattach_old_version(self):
+        """Tests that _check_attach_and_reserve_volume fails if trying
+        to use a multiattach volume with a microversion<2.60.
+        """
+        instance = fake_instance.fake_instance_obj(self.context)
+        volume = {'id': uuids.volumeid, 'multiattach': True}
+        bdm = objects.BlockDeviceMapping(volume_id=uuids.volumeid,
+                                         instance_uuid=instance.uuid)
+        mock_volume_api = mock.MagicMock(spec=cinder.API)
+        self.assertRaises(exception.MultiattachNotSupportedOldMicroversion,
+                          compute_utils.check_attach_and_reserve_volume,
+                          self.context, mock_volume_api, volume, instance, bdm,
+                          supports_multiattach=False)

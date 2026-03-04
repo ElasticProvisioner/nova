@@ -1,0 +1,58 @@
+---
+features:
+  - |
+    Nova services now support graceful shutdown on ``SIGTERM``. When a service
+    receives ``SIGTERM``, it will stop accepting new RPC requests and wait for
+    in-progress tasks to reach a safe termination point.
+
+    The compute service creates a second RPC server on an ``compute-alt`` topic
+    which remains active during graceful shutdown, allowing compute service to
+    finish the in-progress tasks.
+
+    Currently below operations are using second RPC server:
+
+    * Live migration
+    * Cold migration
+    * Resize
+    * Revert resize
+    * Server external Event
+    * Get Console output
+
+    Nova added two new configuration options which will control this behavior:
+
+    * ``[DEFAULT]/graceful_shutdown_timeout`` - The overall time the service
+      waits before forcefully exit. This is defaults to 180 seconds for each
+      Nova services.
+    * ``[DEFAULT]/manager_shutdown_timeout`` - The time the service manager
+      waits for in-progress tasks to complete during graceful shutdown. This
+      is defaults to 160 seconds for each service manager. This must be less
+      than ``graceful_shutdown_timeout``.
+
+    You can increase these timeouts based on the traffic and how long the
+    long-running (e.g. live migrations) tasks take in your deployment.
+
+    We plan to improve the graceful shutdown in future releases by task
+    tracking and transitioning resources to a recoverable state. Until then,
+    this feature is experimental.
+upgrade:
+  - |
+    The default value of ``[DEFAULT]/graceful_shutdown_timeout`` has been
+    changed from 60 to 180 seconds for all Nova services. This means that
+    when a Nova service receives ``SIGTERM``, it will now wait up to 180
+    seconds for a graceful shutdown before being forcefully terminated.
+    Operators using external system (e.g. k8s, systemd) to manage the
+    Nova serviecs should ensure that their service stop timeouts are set
+    to at least ``graceful_shutdown_timeout`` to avoid forcefully killing
+    service before Nova finish its graceful shutdown. For example, the
+    systemd ``TimeoutStopSec`` should be set to at least 180 seconds (or
+    greater) for Nova services.
+  - |
+    A new configuration option ``[DEFAULT]/manager_shutdown_timeout`` has been
+    added with a default value of 160 seconds. This controls how long the
+    service manager waits for in-progress tasks to finish during graceful
+    shutdown. Operators may want to tune this value based on how long their
+    typical long-running operations (e.g. live migrations) take to complete.
+  - |
+    The compute service now creates a second RPC server on the ``compute-alt``
+    topic. This means each compute worker will create an additional RabbitMQ
+    queue.

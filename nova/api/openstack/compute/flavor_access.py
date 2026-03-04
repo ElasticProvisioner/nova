@@ -42,7 +42,8 @@ class FlavorAccessController(wsgi.Controller):
     """The flavor access API controller for the OpenStack API."""
 
     @wsgi.expected_errors(404)
-    @validation.query_schema(schema.index_query)
+    @validation.query_schema(schema.index_query, '2.1', '2.101')
+    @validation.query_schema(schema.index_query_v2102, '2.102')
     @validation.response_body_schema(schema.index_response)
     def index(self, req, flavor_id):
         context = req.environ['nova.context']

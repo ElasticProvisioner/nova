@@ -10,14 +10,15 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-# TODO(stephenfin): Remove additionalProperties in a future API version
+# NOTE(stephenfin): We would like to change additionalProperties to false, but
+# these APIs are unversioned so we can't
+
 show_query = {
     'type': 'object',
     'properties': {},
     'additionalProperties': True,
 }
 
-# TODO(stephenfin): Remove additionalProperties in a future API version
 multi_query = {
     'type': 'object',
     'properties': {},

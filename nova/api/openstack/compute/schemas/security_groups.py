@@ -94,12 +94,14 @@ index_query = {
     'additionalProperties': True
 }
 
-# TODO(stephenfin): Remove additionalProperties in a future API version
 index_server_query = {
     'type': 'object',
     'properties': {},
     'additionalProperties': True,
 }
+
+index_server_query_v2102 = copy.deepcopy(index_server_query)
+index_server_query_v2102['additionalProperties'] = False
 
 # TODO(stephenfin): Remove additionalProperties in a future API version
 add_security_group = {

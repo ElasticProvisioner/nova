@@ -65,7 +65,8 @@ class InterfaceAttachmentController(wsgi.Controller):
         self.network_api = neutron.API()
 
     @wsgi.expected_errors((404, 501))
-    @validation.query_schema(schema.index_query)
+    @validation.query_schema(schema.index_query, '2.1', '2.101')
+    @validation.query_schema(schema.index_query_v2102, '2.102')
     @validation.response_body_schema(schema.index_response, '2.1', '2.69')
     @validation.response_body_schema(schema.index_response_v270, '2.70')
     def index(self, req, server_id):
@@ -110,7 +111,8 @@ class InterfaceAttachmentController(wsgi.Controller):
         return {'interfaceAttachments': results}
 
     @wsgi.expected_errors((403, 404))
-    @validation.query_schema(schema.show_query)
+    @validation.query_schema(schema.show_query, '2.1', '2.101')
+    @validation.query_schema(schema.show_query_v2102, '2.102')
     @validation.response_body_schema(schema.show_response, '2.1', '2.69')
     @validation.response_body_schema(schema.show_response_v270, '2.70')
     def show(self, req, server_id, id):

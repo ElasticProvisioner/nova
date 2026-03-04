@@ -14,6 +14,33 @@ import copy
 
 from nova.api.validation import parameter_types
 
+index_query = {
+    'type': 'object',
+    'properties': {
+        'limit': parameter_types.multi_params(
+             parameter_types.non_negative_integer),
+        'offset': parameter_types.multi_params(
+             parameter_types.non_negative_integer)
+    },
+    # NOTE(gmann): This is kept True to keep backward compatibility.
+    # As of now Schema validation stripped out the additional parameters and
+    # does not raise 400. In microversion 2.75, we have blocked the additional
+    # parameters.
+    'additionalProperties': True
+}
+
+index_query_v275 = copy.deepcopy(index_query)
+index_query_v275['additionalProperties'] = False
+
+show_query = {
+    'type': 'object',
+    'properties': {},
+    'additionalProperties': True,
+}
+
+show_query_v2102 = copy.deepcopy(show_query)
+show_query_v2102['additionalProperties'] = False
+
 create = {
     'type': 'object',
     'properties': {
@@ -74,31 +101,6 @@ update_v285 = {
     },
     'required': ['volumeAttachment'],
     'additionalProperties': False,
-}
-
-index_query = {
-    'type': 'object',
-    'properties': {
-        'limit': parameter_types.multi_params(
-             parameter_types.non_negative_integer),
-        'offset': parameter_types.multi_params(
-             parameter_types.non_negative_integer)
-    },
-    # NOTE(gmann): This is kept True to keep backward compatibility.
-    # As of now Schema validation stripped out the additional parameters and
-    # does not raise 400. In microversion 2.75, we have blocked the additional
-    # parameters.
-    'additionalProperties': True
-}
-
-index_query_v275 = copy.deepcopy(index_query)
-index_query_v275['additionalProperties'] = False
-
-# TODO(stephenfin): Remove additionalProperties in a future API version
-show_query = {
-    'type': 'object',
-    'properties': {},
-    'additionalProperties': True,
 }
 
 _volume_attachment_response = {
@@ -228,6 +230,8 @@ create_response_v279['properties']['volumeAttachment'] = copy.deepcopy(
 create_response_v279['properties']['volumeAttachment'][
     'required'
 ].append('device')
+
+create_response_v2101 = {'type': 'null'}
 
 update_response = {'type': 'null'}
 

@@ -106,16 +106,13 @@ class AggregateTestCaseV21(test.NoDBTestCase):
     set_metadata = 'self.controller._set_metadata'
     bad_request = exception.ValidationError
 
-    def _set_up(self):
+    def setUp(self):
+        super().setUp()
         self.controller = aggregates_v21.AggregateController()
         self.req = fakes.HTTPRequest.blank('/v2.1/os-aggregates',
                                            use_admin_context=True)
         self.user_req = fakes.HTTPRequest.blank('/v2.1/os-aggregates')
         self.context = self.req.environ['nova.context']
-
-    def setUp(self):
-        super(AggregateTestCaseV21, self).setUp()
-        self._set_up()
 
     def test_index(self):
         def _list_aggregates(context):
@@ -129,6 +126,15 @@ class AggregateTestCaseV21(test.NoDBTestCase):
             result = _transform_aggregate_list_azs(result['aggregates'])
             self._assert_agg_data(AGGREGATE_LIST, _make_agg_list(result))
             self.assertTrue(mock_list.called)
+
+    def test_index_invalid_query_params(self):
+        req = fakes.HTTPRequest.blank(
+            '/v2/os-aggregates?unknown=1',
+            use_admin_context=True,
+            version='2.102')
+        self.assertRaises(
+            exception.ValidationError, self.controller.index, req
+        )
 
     def test_create(self):
         with mock.patch.object(self.controller.api, 'create_aggregate',
@@ -292,6 +298,15 @@ class AggregateTestCaseV21(test.NoDBTestCase):
             aggregate = _transform_aggregate_az(aggregate['aggregate'])
             self._assert_agg_data(AGGREGATE, _make_agg_obj(aggregate))
             mock_get.assert_called_once_with(self.context, '1')
+
+    def test_show_invalid_query_params(self):
+        req = fakes.HTTPRequest.blank(
+            '/v2/os-aggregates/1?unknown=1',
+            use_admin_context=True,
+            version='2.102')
+        self.assertRaises(
+            exception.ValidationError, self.controller.show, req, '1'
+        )
 
     def test_show_with_bad_aggregate(self):
         side_effect = exception.AggregateNotFound(aggregate_id='2')

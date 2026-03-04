@@ -384,7 +384,7 @@ class TestOpenStackClient(object):
     def post_server_volume(self, server_id, volume_attachment):
         return self.api_post('/servers/%s/os-volume_attachments' %
                              (server_id), volume_attachment
-                            ).body['volumeAttachment']
+                            )
 
     def put_server_volume(self, server_id, original_volume_id, volume_id):
         return self.api_put('/servers/%s/os-volume_attachments/%s' %

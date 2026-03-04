@@ -10,6 +10,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import collections.abc
 import functools
 import inspect
 
@@ -107,3 +108,49 @@ def process_sort_params(
             result_dirs.append(default_dir_value)
 
     return result_keys, result_dirs
+
+
+def _db_connection_type(db_connection: str) -> str:
+    """Returns a lowercase symbol for the db type.
+
+    This is useful when we need to change what we are doing per DB (like
+    handling regexes). In a CellsV2 world it probably needs to do something
+    better than use the database configuration string.
+    """
+    db_string = db_connection.split(':')[0].split('+')[0]
+    return db_string.lower()
+
+
+def _safe_regex_mysql(raw_string: str) -> str:
+    """Make regex safe to MySQL.
+
+    Certain items like ``|`` are interpreted raw by mysql REGEX. If you search
+    for a single | then you trigger an error because it's expecting content on
+    either side.
+
+    For consistency sake we escape all ``|``. This does mean we wouldn't
+    support something like foo|bar to match completely different things,
+    however, one can argue putting such complicated regex into name search
+    probably means you are doing this wrong.
+    """
+    return raw_string.replace('|', '\\|')
+
+
+def get_regexp_ops(
+    connection: str
+) -> tuple[collections.abc.Callable[[str], str], str]:
+    """Return safety filter and db opts for regex."""
+    regex_safe_filters = {
+        'mysql': _safe_regex_mysql
+    }
+    regexp_op_map = {
+        'postgresql': '~',
+        'mysql': 'REGEXP',
+        'sqlite': 'REGEXP'
+    }
+    db_type = _db_connection_type(connection)
+
+    return (
+        regex_safe_filters.get(db_type, lambda x: x),
+        regexp_op_map.get(db_type, 'LIKE'),
+    )

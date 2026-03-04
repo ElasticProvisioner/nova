@@ -118,9 +118,9 @@ class KeypairController(wsgi.Controller):
 
     @wsgi.response(202, '2.0', '2.1')
     @wsgi.response(204, '2.2')
-    @validation.query_schema(schema.delete_query_schema_v20, '2.0', '2.9')
-    @validation.query_schema(schema.delete_query_schema_v210, '2.10', '2.74')
-    @validation.query_schema(schema.delete_query_schema_v275, '2.75')
+    @validation.query_schema(schema.delete_query_v20, '2.0', '2.9')
+    @validation.query_schema(schema.delete_query_v210, '2.10', '2.74')
+    @validation.query_schema(schema.delete_query_v275, '2.75')
     @validation.response_body_schema(schema.delete_response)
     @wsgi.expected_errors(404)
     def delete(self, req, id):
@@ -143,9 +143,9 @@ class KeypairController(wsgi.Controller):
         except exception.KeypairNotFound as exc:
             raise webob.exc.HTTPNotFound(explanation=exc.format_message())
 
-    @validation.query_schema(schema.show_query_schema_v20, '2.0', '2.9')
-    @validation.query_schema(schema.show_query_schema_v210, '2.10', '2.74')
-    @validation.query_schema(schema.show_query_schema_v275, '2.75')
+    @validation.query_schema(schema.show_query_v20, '2.0', '2.9')
+    @validation.query_schema(schema.show_query_v210, '2.10', '2.74')
+    @validation.query_schema(schema.show_query_v275, '2.75')
     @validation.response_body_schema(schema.show_response, '2.0', '2.1')
     @validation.response_body_schema(schema.show_response_v22, '2.2')
     @wsgi.expected_errors(404)
@@ -174,10 +174,10 @@ class KeypairController(wsgi.Controller):
             raise webob.exc.HTTPNotFound(explanation=exc.format_message())
         return self._view_builder.show(keypair, key_type=key_type)
 
-    @validation.query_schema(schema.index_query_schema_v20, '2.0', '2.9')
-    @validation.query_schema(schema.index_query_schema_v210, '2.10', '2.34')
-    @validation.query_schema(schema.index_query_schema_v235, '2.35', '2.74')
-    @validation.query_schema(schema.index_query_schema_v275, '2.75')
+    @validation.query_schema(schema.index_query_v20, '2.0', '2.9')
+    @validation.query_schema(schema.index_query_v210, '2.10', '2.34')
+    @validation.query_schema(schema.index_query_v235, '2.35', '2.74')
+    @validation.query_schema(schema.index_query_v275, '2.75')
     @validation.response_body_schema(schema.index_response, '2.0', '2.1')
     @validation.response_body_schema(schema.index_response_v22, '2.2', '2.34')
     @validation.response_body_schema(schema.index_response_v235, '2.35')

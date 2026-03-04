@@ -34,8 +34,8 @@ eventlet mode. If the variable is not set the above default is applied.
    Since nova 32.0.0 (2025.2 Flamingo) the nova-scheduler, nova-metadata, and
    nova-api can be switched to native threading mode.
 
-   Since nova 33.0.0 (2026.1 Gazpacho) also the nova-conductor can be switched
-   to native threading mode.
+   Since nova 33.0.0 (2026.1 Gazpacho) the nova-conductor and nova-compute
+   can also be switched to native threading mode.
 
    Since nova 33.0.0 (2026.1. Gazpacho) the nova-scheduler, nova-metadata, and
    nova-api using native threading mode by default but still can be switched
@@ -95,6 +95,13 @@ tasks to be executed concurrently.
   a bad idea to use change this config option from its default value, 1. If
   more performant live migration is needed then enable
   :oslo.config:option:`libvirt.live_migration_parallel_connections` instead.
+
+* :oslo.config:option:`max_concurrent_builds` and
+  :oslo.config:option:`max_concurrent_snapshots`: In native threading mode
+  both types of operations using a common shared executor to free up the RPC
+  handler workers. Therefore both type of operations are counted against the
+  same shared maximum limit. If the two options are set to different values
+  then the shared limit will be the bigger of the two values.
 
 Seeing the usage of the pools
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

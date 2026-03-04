@@ -17,7 +17,6 @@ import copy
 from nova.api.validation import parameter_types
 from nova.api.validation import response_types
 
-
 index_query_v20 = {
     'type': 'object',
     'properties': {

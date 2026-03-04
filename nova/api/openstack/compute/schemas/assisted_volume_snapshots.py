@@ -65,8 +65,8 @@ delete_query = {
     'additionalProperties': True
 }
 
-delete_query_275 = copy.deepcopy(delete_query)
-delete_query_275['additionalProperties'] = False
+delete_query_v275 = copy.deepcopy(delete_query)
+delete_query_v275['additionalProperties'] = False
 
 create_response = {
     'type': 'object',

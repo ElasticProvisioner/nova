@@ -844,11 +844,15 @@ Related options:
 * ``[filter_scheduler] isolated_images``
 * ``[filter_scheduler] isolated_hosts``
 """),
-    # TODO(stephenfin): Consider deprecating these next two options: they're
-    # effectively useless now that we don't support arbitrary image metadata
-    # properties
     cfg.StrOpt(
         "aggregate_image_properties_isolation_namespace",
+        deprecated_for_removal=True,
+        deprecated_since="33.0.0",
+        deprecated_reason="""
+It no longer possible to filter on arbitrary image metadata properties. Support
+for this was removed in 12.0.0 (Liberty). As a result, this option is no longer
+useful.
+""",
         help="""
 Image property namespace for use in the host aggregate.
 
@@ -873,6 +877,13 @@ Related options:
     cfg.StrOpt(
         "aggregate_image_properties_isolation_separator",
         default=".",
+        deprecated_for_removal=True,
+        deprecated_since="33.0.0",
+        deprecated_reason="""
+It no longer possible to filter on arbitrary image metadata properties. Support
+for this was removed in 12.0.0 (Liberty). As a result, this option is no longer
+useful.
+""",
         help="""
 Separator character(s) for image property namespace and name.
 

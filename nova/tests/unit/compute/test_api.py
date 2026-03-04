@@ -412,33 +412,6 @@ class _ComputeAPIUnitTestMixIn(object):
         # 'get_pci_numa_policy_constraint' is only called in this method.
         mock_pci.assert_called_once()
 
-    @mock.patch('nova.objects.BlockDeviceMapping.save')
-    @mock.patch.object(compute_rpcapi.ComputeAPI, 'reserve_block_device_name')
-    def test_create_volume_bdm_call_reserve_dev_name(self, mock_reserve,
-                                                     mock_bdm_save):
-        bdm = objects.BlockDeviceMapping(
-                **fake_block_device.FakeDbBlockDeviceDict(
-                {
-                 'id': 1,
-                 'volume_id': 1,
-                 'source_type': 'volume',
-                 'destination_type': 'volume',
-                 'device_name': 'vda',
-                 'boot_index': 1,
-                 }))
-        mock_reserve.return_value = bdm
-        instance = self._create_instance_obj()
-        volume = {'id': '1', 'multiattach': False}
-        result = self.compute_api._create_volume_bdm(self.context,
-                                                     instance,
-                                                     'vda',
-                                                     volume,
-                                                     None,
-                                                     None)
-        self.assertTrue(mock_reserve.called)
-        self.assertEqual(result, bdm)
-        mock_bdm_save.assert_called_once_with()
-
     @mock.patch.object(objects.BlockDeviceMapping, 'create')
     def test_create_volume_bdm_local_creation(self, bdm_create):
         instance = self._create_instance_obj()
@@ -455,66 +428,48 @@ class _ComputeAPIUnitTestMixIn(object):
                  'disk_bus': None,
                  'device_type': None
                  }))
-        result = self.compute_api._create_volume_bdm(self.context,
+        result = self.compute_api._create_volume_bdm_locally(self.context,
                                                      instance,
                                                      '/dev/vda',
                                                      {'id': volume_id},
                                                      None,
-                                                     None,
-                                                     is_local_creation=True)
+                                                     None)
         self.assertEqual(result.instance_uuid, bdm.instance_uuid)
         self.assertIsNone(result.device_name)
         self.assertEqual(result.volume_id, bdm.volume_id)
         self.assertTrue(bdm_create.called)
 
-    @mock.patch.object(compute_api.API, '_record_action_start')
-    @mock.patch.object(compute_rpcapi.ComputeAPI, 'reserve_block_device_name')
     @mock.patch.object(objects.BlockDeviceMappingList, 'get_by_volume')
-    @mock.patch.object(compute_rpcapi.ComputeAPI, 'attach_volume')
-    def test_attach_volume_new_flow(
-        self, mock_attach, mock_get_by_volume, mock_reserve, mock_record
-    ):
+    @mock.patch.object(nova.conductor.api.ComputeTaskAPI, 'attach_volume')
+    def test_attach_volume_new_flow(self, mock_attach, mock_get_by_volume):
         mock_get_by_volume.side_effect = exception.VolumeBDMNotFound(
             volume_id='fake-volume-id')
         instance = self._create_instance_obj()
         volume = fake_volume.fake_volume(1, 'test-vol', 'test-vol',
                                          None, None, None, None, None)
-
-        fake_bdm = mock.MagicMock(spec=objects.BlockDeviceMapping)
-        mock_reserve.return_value = fake_bdm
 
         mock_volume_api = mock.patch.object(self.compute_api, 'volume_api',
                                             mock.MagicMock(spec=cinder.API))
 
         with mock_volume_api as mock_v_api:
             mock_v_api.get.return_value = volume
-            mock_v_api.attachment_create.return_value = \
-                {'id': uuids.attachment_id}
             self.compute_api.attach_volume(
                 self.context, instance, volume['id'])
-            mock_v_api.check_availability_zone.assert_called_once_with(
-                self.context, volume, instance=instance)
-            mock_v_api.attachment_create.assert_called_once_with(self.context,
-                                                                 volume['id'],
-                                                                 instance.uuid)
             mock_attach.assert_called_once_with(self.context,
-                                                instance, fake_bdm)
+                instance, volume, None, None, None, tag=None,
+                supports_multiattach=False, delete_on_termination=False,
+                do_cast=True)
 
-    @mock.patch.object(compute_api.API, '_record_action_start')
-    @mock.patch.object(compute_rpcapi.ComputeAPI, 'reserve_block_device_name')
     @mock.patch.object(objects.BlockDeviceMappingList, 'get_by_volume')
-    @mock.patch.object(compute_rpcapi.ComputeAPI, 'attach_volume')
+    @mock.patch.object(nova.conductor.api.ComputeTaskAPI, 'attach_volume')
     def test_tagged_volume_attach_new_flow(
-        self, mock_attach, mock_get_by_volume, mock_reserve, mock_record
+        self, mock_attach, mock_get_by_volume
     ):
         mock_get_by_volume.side_effect = exception.VolumeBDMNotFound(
             volume_id='fake-volume-id')
         instance = self._create_instance_obj()
         volume = fake_volume.fake_volume(1, 'test-vol', 'test-vol',
                                          None, None, None, None, None)
-
-        fake_bdm = mock.MagicMock(spec=objects.BlockDeviceMapping)
-        mock_reserve.return_value = fake_bdm
 
         mock_volume_api = mock.patch.object(self.compute_api, 'volume_api',
                                             mock.MagicMock(spec=cinder.API))
@@ -525,35 +480,22 @@ class _ComputeAPIUnitTestMixIn(object):
                 {'id': uuids.attachment_id}
             self.compute_api.attach_volume(
                 self.context, instance, volume['id'], tag='foo')
-            mock_reserve.assert_called_once_with(self.context, instance, None,
-                                                 volume['id'],
-                                                 device_type=None,
-                                                 disk_bus=None, tag='foo',
-                                                 multiattach=False)
-            mock_v_api.check_availability_zone.assert_called_once_with(
-                self.context, volume, instance=instance)
-            mock_v_api.attachment_create.assert_called_once_with(
-                self.context, volume['id'], instance.uuid)
             mock_attach.assert_called_once_with(self.context,
-                                                instance, fake_bdm)
+                instance, volume, None, None, None, tag='foo',
+                supports_multiattach=False, delete_on_termination=False,
+                do_cast=True)
 
-    @mock.patch.object(compute_rpcapi.ComputeAPI, 'reserve_block_device_name')
-    @mock.patch.object(
-        objects.BlockDeviceMapping, 'get_by_volume_and_instance')
+    @mock.patch.object(nova.conductor.api.ComputeTaskAPI, 'attach_volume')
     @mock.patch.object(objects.BlockDeviceMappingList, 'get_by_volume')
-    def test_attach_volume_reserve_bdm_timeout(
-            self, mock_get_by_volume, mock_get_by_volume_and_instance,
-            mock_reserve):
+    def test_attach_volume_timeout(self, mock_get_by_volume, mock_attach):
         mock_get_by_volume.side_effect = exception.VolumeBDMNotFound(
             volume_id='fake-volume-id')
 
-        fake_bdm = mock.MagicMock(spec=objects.BlockDeviceMapping)
-        mock_get_by_volume_and_instance.return_value = fake_bdm
         instance = self._create_instance_obj()
         volume = fake_volume.fake_volume(1, 'test-vol', 'test-vol',
                                          None, None, None, None, None)
 
-        mock_reserve.side_effect = oslo_exceptions.MessagingTimeout()
+        mock_attach.side_effect = oslo_exceptions.MessagingTimeout()
 
         mock_volume_api = mock.patch.object(self.compute_api, 'volume_api',
                                             mock.MagicMock(spec=cinder.API))
@@ -563,40 +505,6 @@ class _ComputeAPIUnitTestMixIn(object):
             self.assertRaises(oslo_exceptions.MessagingTimeout,
                                 self.compute_api.attach_volume,
                                 self.context, instance, volume['id'])
-            mock_get_by_volume_and_instance.assert_called_once_with(
-                self.context, volume['id'], instance.uuid)
-            fake_bdm.destroy.assert_called_once_with()
-
-    @mock.patch.object(compute_rpcapi.ComputeAPI, 'reserve_block_device_name')
-    @mock.patch.object(objects.BlockDeviceMappingList, 'get_by_volume')
-    @mock.patch.object(compute_rpcapi.ComputeAPI, 'attach_volume')
-    def test_attach_volume_attachment_create_fails(
-        self, mock_attach, mock_get_by_volume, mock_reserve
-    ):
-        mock_get_by_volume.side_effect = exception.VolumeBDMNotFound(
-            volume_id='fake-volume-id')
-        instance = self._create_instance_obj()
-        volume = fake_volume.fake_volume(1, 'test-vol', 'test-vol',
-                                         None, None, None, None, None)
-
-        fake_bdm = mock.MagicMock(spec=objects.BlockDeviceMapping)
-        mock_reserve.return_value = fake_bdm
-
-        mock_volume_api = mock.patch.object(self.compute_api, 'volume_api',
-                                            mock.MagicMock(spec=cinder.API))
-
-        with mock_volume_api as mock_v_api:
-            mock_v_api.get.return_value = volume
-            mock_v_api.attachment_create.side_effect = test.TestingException()
-            self.assertRaises(test.TestingException,
-                              self.compute_api.attach_volume,
-                              self.context, instance, volume['id'])
-            mock_v_api.check_availability_zone.assert_called_once_with(
-                self.context, volume, instance=instance)
-            mock_v_api.attachment_create.assert_called_once_with(
-                self.context, volume['id'], instance.uuid)
-            self.assertEqual(0, mock_attach.call_count)
-            fake_bdm.destroy.assert_called_once_with()
 
     @mock.patch.object(objects.BlockDeviceMappingList, 'get_by_volume')
     def test_attach_volume_bdm_exists(self, mock_by_volume):
@@ -7948,19 +7856,6 @@ class ComputeAPIUnitTestCase(_ComputeAPIUnitTestMixIn, test.NoDBTestCase):
                                        port_id=uuids.port)
         mock_record.assert_called_once_with(
             self.context, instance, instance_actions.DETACH_INTERFACE)
-
-    def test_check_attach_and_reserve_volume_multiattach_old_version(self):
-        """Tests that _check_attach_and_reserve_volume fails if trying
-        to use a multiattach volume with a microversion<2.60.
-        """
-        instance = self._create_instance_obj()
-        volume = {'id': uuids.volumeid, 'multiattach': True}
-        bdm = objects.BlockDeviceMapping(volume_id=uuids.volumeid,
-                                         instance_uuid=instance.uuid)
-        self.assertRaises(exception.MultiattachNotSupportedOldMicroversion,
-                          self.compute_api._check_attach_and_reserve_volume,
-                          self.context, volume, instance, bdm,
-                          supports_multiattach=False)
 
     @mock.patch('nova.volume.cinder.API.get',
                 return_value={'id': uuids.volumeid, 'multiattach': True})

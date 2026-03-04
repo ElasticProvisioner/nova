@@ -88,7 +88,7 @@ class AccessIPsAPIValidationTestV21(test.TestCase):
         }
         body['rebuild'].update(params)
         req = fakes.HTTPRequest.blank('')
-        self.controller._action_rebuild(req, fakes.FAKE_UUID, body=body)
+        self.controller._rebuild(req, fakes.FAKE_UUID, body=body)
 
     def test_create_server_with_access_ipv4(self):
         params = {v4_key: '192.168.0.10'}

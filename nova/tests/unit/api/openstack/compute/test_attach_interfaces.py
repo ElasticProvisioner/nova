@@ -15,6 +15,7 @@
 
 from unittest import mock
 
+import fixtures
 from webob import exc
 
 from nova.api.openstack import common
@@ -90,6 +91,10 @@ def fake_show_port(context, port_id, **kwargs):
         raise exception.PortNotFound(port_id=port_id)
 
 
+def fake_list_ports(context, **kwargs):
+    return {'ports': ports}
+
+
 def fake_attach_interface(self, context, instance, network_id, port_id,
                           requested_ip='192.168.1.3', tag=None):
     if not network_id:
@@ -133,18 +138,13 @@ class InterfaceAttachTestsV21(test.NoDBTestCase):
         super(InterfaceAttachTestsV21, self).setUp()
         self.flags(timeout=30, group='neutron')
         self.stub_out('nova.compute.api.API.get', fake_get_instance)
-        self.expected_show = {'interfaceAttachment':
-            {'net_id': FAKE_NET_ID1,
-             'port_id': FAKE_PORT_ID1,
-             'mac_addr': port_data1['mac_address'],
-             'port_state': port_data1['status'],
-             'fixed_ips': port_data1['fixed_ips'],
-            }}
         self.attachments = self.controller_cls()
-        show_port_patch = mock.patch.object(self.attachments.network_api,
-                                            'show_port', fake_show_port)
-        show_port_patch.start()
-        self.addCleanup(show_port_patch.stop)
+        self.useFixture(
+            fixtures.MockPatchObject(
+                self.attachments.network_api, 'show_port', fake_show_port))
+        self.useFixture(
+            fixtures.MockPatchObject(
+                self.attachments.network_api, 'list_ports', fake_list_ports))
         self.req = fakes.HTTPRequest.blank('')
 
     @mock.patch.object(compute_api.API, 'get',
@@ -169,10 +169,17 @@ class InterfaceAttachTestsV21(test.NoDBTestCase):
             kwargs={'body': {'interfaceAttachment': {}}})
 
     def test_show(self):
-        result = self.attachments.show(self.req, FAKE_UUID1, FAKE_PORT_ID1)
-        self.assertEqual(self.expected_show, result)
+        actual = self.attachments.show(self.req, FAKE_UUID1, FAKE_PORT_ID1)
+        expected = {'interfaceAttachment': {
+            'net_id': FAKE_NET_ID1,
+            'port_id': FAKE_PORT_ID1,
+            'mac_addr': port_data1['mac_address'],
+            'port_state': port_data1['status'],
+            'fixed_ips': port_data1['fixed_ips'],
+        }}
+        self.assertEqual(expected, actual)
 
-    def test_show_with_port_not_found(self):
+    def test_show_port_not_found(self):
         self.assertRaises(exc.HTTPNotFound,
                           self.attachments.show, self.req, FAKE_UUID2,
                           FAKE_PORT_ID1)
@@ -183,6 +190,56 @@ class InterfaceAttachTestsV21(test.NoDBTestCase):
             self.assertRaises(exc.HTTPForbidden,
                               self.attachments.show, self.req, FAKE_UUID1,
                               FAKE_PORT_ID1)
+
+    def test_show_invalid_query_params(self):
+        req = fakes.HTTPRequest.blank(
+            f'/servers/{FAKE_UUID1}/os-interface/{FAKE_PORT_ID1}?invalid=1',
+            use_admin_context=True, version='2.102')
+        self.assertRaises(
+            exception.ValidationError,
+            self.attachments.show,
+            req,
+            FAKE_UUID1,
+            FAKE_PORT_ID1,
+        )
+
+    def test_index(self):
+        actual = self.attachments.index(self.req, FAKE_UUID1)
+        expected = {'interfaceAttachments': [
+            {
+                'net_id': FAKE_NET_ID1,
+                'port_id': FAKE_PORT_ID1,
+                'mac_addr': port_data1['mac_address'],
+                'port_state': port_data1['status'],
+                'fixed_ips': port_data1['fixed_ips'],
+            },
+            {
+                'net_id': FAKE_NET_ID2,
+                'port_id': FAKE_PORT_ID2,
+                'mac_addr': port_data2['mac_address'],
+                'port_state': port_data2['status'],
+                'fixed_ips': port_data2['fixed_ips'],
+            },
+            {
+                'net_id': FAKE_NET_ID3,
+                'port_id': FAKE_PORT_ID3,
+                'mac_addr': port_data3['mac_address'],
+                'port_state': port_data3['status'],
+                'fixed_ips': port_data3['fixed_ips'],
+            },
+        ]}
+        self.assertEqual(expected, actual)
+
+    def test_index_invalid_query_params(self):
+        req = fakes.HTTPRequest.blank(
+            f'/servers/{FAKE_UUID1}/os-interface?invalid=1',
+            use_admin_context=True, version='2.102')
+        self.assertRaises(
+            exception.ValidationError,
+            self.attachments.index,
+            req,
+            FAKE_UUID1,
+        )
 
     def test_delete(self):
         self.stub_out('nova.compute.api.API.detach_interface',
@@ -535,10 +592,9 @@ class InterfaceAttachTestsV249(test.NoDBTestCase):
     def setUp(self):
         super(InterfaceAttachTestsV249, self).setUp()
         self.attachments = self.controller_cls()
-        show_port_patch = mock.patch.object(self.attachments.network_api,
-                                            'show_port', fake_show_port)
-        show_port_patch.start()
-        self.addCleanup(show_port_patch.stop)
+        self.useFixture(
+            fixtures.MockPatchObject(
+                self.attachments.network_api, 'show_port', fake_show_port))
         self.stub_out('nova.compute.api.API.attach_interface',
                       fake_attach_interface)
 

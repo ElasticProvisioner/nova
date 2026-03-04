@@ -58,11 +58,13 @@ class FlavorsController(wsgi.Controller):
     @wsgi.expected_errors((400, 409))
     @validation.schema(schema.create_v20, '2.0', '2.0')
     @validation.schema(schema.create, '2.1', '2.54')
-    @validation.schema(schema.create_v255, '2.55')
+    @validation.schema(schema.create_v255, '2.55', '2.101')
+    @validation.schema(schema.create_v2102, '2.102')
     @validation.response_body_schema(schema.create_response, '2.0', '2.54')
     @validation.response_body_schema(schema.create_response_v255, '2.55', '2.60')  # noqa: E501
     @validation.response_body_schema(schema.create_response_v261, '2.61', '2.74')  # noqa: E501
-    @validation.response_body_schema(schema.create_response_v275, '2.75')
+    @validation.response_body_schema(schema.create_response_v275, '2.75', '2.101')  # noqa: E501
+    @validation.response_body_schema(schema.create_response_v2102, '2.102')
     def create(self, req, body):
         context = req.environ['nova.context']
         context.can(fm_policies.POLICY_ROOT % 'create', target={})
@@ -106,15 +108,16 @@ class FlavorsController(wsgi.Controller):
             # flavor.extra_specs is populated with the empty string.
             flavor.extra_specs = {}
 
-        return self._view_builder.show(req, flavor, include_description,
-                                       include_extra_specs=include_extra_specs)
+        return self._view_builder.show(
+            req, flavor, include_extra_specs=include_extra_specs)
 
     @wsgi.api_version('2.55')
     @wsgi.expected_errors((400, 404))
     @validation.schema(schema.update, '2.55')
     @validation.response_body_schema(schema.update_response, '2.55', '2.60')
     @validation.response_body_schema(schema.update_response_v261, '2.61', '2.74')  # noqa: E501
-    @validation.response_body_schema(schema.update_response_v275, '2.75')
+    @validation.response_body_schema(schema.update_response_v275, '2.75', '2.101')  # noqa: E501
+    @validation.response_body_schema(schema.update_response_v2102, '2.102')
     def update(self, req, id, body):
         # Validate the policy.
         context = req.environ['nova.context']
@@ -132,12 +135,13 @@ class FlavorsController(wsgi.Controller):
         if api_version_request.is_supported(req, '2.61'):
             include_extra_specs = context.can(
                 fes_policies.POLICY_ROOT % 'index', fatal=False)
-        return self._view_builder.show(req, flavor, include_description=True,
-                                       include_extra_specs=include_extra_specs)
+        return self._view_builder.show(
+            req, flavor, include_extra_specs=include_extra_specs)
 
     @wsgi.expected_errors(400)
     @validation.query_schema(schema.index_query, '2.0', '2.74')
-    @validation.query_schema(schema.index_query_275, '2.75')
+    @validation.query_schema(schema.index_query_v275, '2.75', '2.101')
+    @validation.query_schema(schema.index_query_v2102, '2.102')
     @validation.response_body_schema(schema.index_response, '2.0', '2.54')
     @validation.response_body_schema(schema.index_response_v255, '2.55')
     def index(self, req):
@@ -147,10 +151,12 @@ class FlavorsController(wsgi.Controller):
 
     @wsgi.expected_errors(400)
     @validation.query_schema(schema.index_query, '2.0', '2.74')
-    @validation.query_schema(schema.index_query_275, '2.75')
+    @validation.query_schema(schema.index_query_v275, '2.75', '2.101')
+    @validation.query_schema(schema.index_query_v2102, '2.102')
     @validation.response_body_schema(schema.detail_response, '2.0', '2.54')
     @validation.response_body_schema(schema.detail_response_v255, '2.55', '2.60')  # noqa: E501
-    @validation.response_body_schema(schema.detail_response_v261, '2.61')
+    @validation.response_body_schema(schema.detail_response_v261, '2.61', '2.101')  # noqa: E501
+    @validation.response_body_schema(schema.detail_response_v2102, '2.102')
     def detail(self, req):
         """Return all flavors in detail."""
         context = req.environ['nova.context']
@@ -165,11 +171,13 @@ class FlavorsController(wsgi.Controller):
             req, limited_flavors, include_extra_specs=include_extra_specs)
 
     @wsgi.expected_errors(404)
-    @validation.query_schema(schema.show_query)
+    @validation.query_schema(schema.show_query, '2.0', '2.101')
+    @validation.query_schema(schema.show_query_v2102, '2.102')
     @validation.response_body_schema(schema.show_response, '2.0', '2.54')
     @validation.response_body_schema(schema.show_response_v255, '2.55', '2.60')
     @validation.response_body_schema(schema.show_response_v261, '2.61', '2.74')
-    @validation.response_body_schema(schema.show_response_v275, '2.75')
+    @validation.response_body_schema(schema.show_response_v275, '2.75', '2.101')  # noqa: E501
+    @validation.response_body_schema(schema.show_response_v2102, '2.102')
     def show(self, req, id):
         """Return data about the given flavor id."""
         context = req.environ['nova.context']
@@ -183,11 +191,8 @@ class FlavorsController(wsgi.Controller):
             include_extra_specs = context.can(
                 fes_policies.POLICY_ROOT % 'index', fatal=False)
 
-        include_description = api_version_request.is_supported(req, '2.55')
-
         return self._view_builder.show(
-            req, flavor, include_description=include_description,
-            include_extra_specs=include_extra_specs)
+            req, flavor, include_extra_specs=include_extra_specs)
 
     def _parse_is_public(self, is_public):
         """Parse is_public into something usable."""
@@ -234,6 +239,9 @@ class FlavorsController(wsgi.Controller):
                 msg = (_('Invalid minDisk filter [%s]') %
                        req.params['minDisk'])
                 raise webob.exc.HTTPBadRequest(explanation=msg)
+
+        if 'name' in req.params:
+            filters['name'] = req.params['name']
 
         try:
             limited_flavors = objects.FlavorList.get_all(

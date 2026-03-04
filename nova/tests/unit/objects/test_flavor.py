@@ -390,9 +390,15 @@ class _TestFlavorList(object):
         self.assertEqual(len(api_flavors), len(flavors))
 
     def test_get_all_from_db_with_limit(self):
-        flavors = objects.FlavorList.get_all(self.context,
-                                             limit=1)
+        flavors = objects.FlavorList.get_all(self.context, limit=1)
         self.assertEqual(1, len(flavors))
+
+    def test_get_all_from_db_with_filters(self):
+        flavors = objects.FlavorList.get_all(
+            self.context, filters={'name': 'tiny'})
+        # these flavors are created by the DefaultFlavorsFixture: there should
+        # be two: m1.tiny and m1.tiny.specs
+        self.assertEqual(2, len(flavors))
 
     @mock.patch('nova.objects.flavor._flavor_get_all_from_db')
     def test_get_all(self, mock_api_get):

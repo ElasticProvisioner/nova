@@ -780,6 +780,12 @@ def stub_out_flavor_get_all(test):
             elif reject_min('root_gb', 'min_root_gb'):
                 continue
 
+            # in reality our filtering is regex based, but Python's regex
+            # format differs from MySQL (which differs from PostgreSQL, etc.)
+            # so we do a simple substring search instead
+            if 'name' in filters and filters['name'] not in flavor.name:
+                continue
+
             res.append(flavor)
 
         res = sorted(res, key=lambda item: getattr(item, sort_key))

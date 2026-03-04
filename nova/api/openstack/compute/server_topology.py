@@ -28,7 +28,8 @@ class ServerTopologyController(wsgi.Controller):
 
     @wsgi.api_version("2.78")
     @wsgi.expected_errors(404)
-    @validation.query_schema(schema.query_params_v21)
+    @validation.query_schema(schema.index_query, '2.78', '2.101')
+    @validation.query_schema(schema.index_query_v2102, '2.102')
     @validation.response_body_schema(schema.index_response)
     def index(self, req, server_id):
         context = req.environ["nova.context"]

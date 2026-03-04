@@ -17,6 +17,8 @@ from nova.tests.functional.notification_sample_tests \
 class TestFlavorNotificationSample(
         notification_sample_base.NotificationSampleTestBase):
 
+    MAX_MICROVERSION = '2.1'
+
     def test_flavor_create(self):
         body = {
             "flavor": {

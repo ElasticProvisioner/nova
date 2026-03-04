@@ -14,15 +14,23 @@
 
 import copy
 
-
-# TODO(stephenfin): Remove additionalProperties in a future API version
 index_query = {
     'type': 'object',
     'properties': {},
     'additionalProperties': True,
 }
 
-detail_query = index_query
+index_query_v2102 = copy.deepcopy(index_query)
+index_query_v2102['additionalProperties'] = False
+
+detail_query = {
+    'type': 'object',
+    'properties': {},
+    'additionalProperties': True,
+}
+
+detail_query_v2102 = copy.deepcopy(detail_query)
+detail_query_v2102['additionalProperties'] = False
 
 index_response = {
     'type': 'object',

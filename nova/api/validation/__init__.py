@@ -57,7 +57,7 @@ class Schemas:
 
     def add_schema(
         self,
-        schema: tuple[dict[str, object]],
+        schema: dict[str, object],
         min_version: str | None,
         max_version: str | None,
     ) -> None:
@@ -74,11 +74,58 @@ class Schemas:
 
         self.validate_schemas()
 
+    @classmethod
+    def _validate_schema(cls, schema: ty.Any) -> None:
+        # we should only be given dicts (JSON objects) here
+        assert isinstance(schema, dict)
+
+        # some schemas are empty, hence .get
+        if schema.get('type') != 'object':
+            return
+
+        # if we have oneOf then there are subschemas: fake these to look like
+        # complete schema
+        # NOTE(stephenfin): we may need to extend this for anyOf/allOf one day
+        if 'oneOf' in schema:
+            for sub_schema in schema['oneOf']:
+                cls._validate_schema({'type': 'object', **sub_schema})
+                return
+
+        # if we have an object-type additionalProperties value then this
+        # contains a schema (we use this to allow arbitrary keys and validated
+        # values)
+        if (
+            'additionalProperties' in schema and
+            isinstance(schema['additionalProperties'], dict)
+        ):
+            cls._validate_schema(schema['additionalProperties'])
+            return
+
+        if 'properties' in schema:
+            properties = schema['properties']
+        elif 'patternProperties' in schema:
+            properties = schema['patternProperties']
+        else:
+            raise RuntimeError(
+                f'no properties/patternProperties key in {schema}'
+            )
+
+        # if we have an object with defined properties, then we insist that
+        # 'additionalProperties' be set (though we don't care what value it is
+        # set to)
+        if 'additionalProperties' not in schema:
+            raise RuntimeError(f'no additionalProperties key in {schema}')
+
+        for value in properties.values():
+            cls._validate_schema(value)
+
     def validate_schemas(self) -> None:
         """Ensure there are no overlapping schemas."""
         prev_max_version: api_version_request.APIVersionRequest | None = None
 
         for schema, min_version, max_version in self._schemas:
+            self._validate_schema(schema)
+
             if prev_max_version:
                 # it doesn't make sense to have multiple schemas if one of them
                 # is unversioned (i.e. applies to everything)
@@ -214,10 +261,12 @@ def schema(
             )
             return func(*args, **kwargs)
 
+        # we need to use setattr/getattr here else we see attr-defined errors
+        # since this is not an attribute of Callable
         if not hasattr(wrapper, 'request_body_schemas'):
-            wrapper.request_body_schemas = Schemas()
+            setattr(wrapper, 'request_body_schemas', Schemas())
 
-        wrapper.request_body_schemas.add_schema(
+        getattr(wrapper, 'request_body_schemas').add_schema(
             request_body_schema, min_version, max_version
         )
 
@@ -285,10 +334,12 @@ def response_body_schema(
                     raise
             return response
 
+        # we need to use setattr/getattr here else we see attr-defined errors
+        # since this is not an attribute of Callable
         if not hasattr(wrapper, 'response_body_schemas'):
-            wrapper.response_body_schemas = Schemas()
+            setattr(wrapper, 'response_body_schemas', Schemas())
 
-        wrapper.response_body_schemas.add_schema(
+        getattr(wrapper, 'response_body_schemas').add_schema(
             response_body_schema, min_version, max_version
         )
 
@@ -381,13 +432,21 @@ def query_schema(request_query_schema, min_version=None,
                 _strip_additional_query_parameters(request_query_schema, req)
             return func(*args, **kwargs)
 
+        # we need to use setattr/getattr here else we see attr-defined errors
+        # since this is not an attribute of Callable
         if not hasattr(wrapper, 'request_query_schemas'):
-            wrapper.request_query_schemas = Schemas()
+            setattr(wrapper, 'request_query_schemas', Schemas())
 
-        wrapper.request_query_schemas.add_schema(
+        getattr(wrapper, 'request_query_schemas').add_schema(
             request_query_schema, min_version, max_version
         )
 
         return wrapper
+
+    if (
+        api_version_request.APIVersionRequest(min_version) >=
+        api_version_request.APIVersionRequest('2.102')
+    ):
+        assert request_query_schema['additionalProperties'] is False
 
     return add_validator

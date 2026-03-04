@@ -101,15 +101,17 @@ detail_query_v275 = copy.deepcopy(show_query_v275)
 update_query = copy.deepcopy(show_query)
 update_query_v275 = copy.deepcopy(show_query_v275)
 
-# TODO(stephenfin): Remove additionalProperties in a future API version
+delete_query = copy.deepcopy(show_query)
+delete_query_v275 = copy.deepcopy(show_query_v275)
+
 defaults_query = {
     'type': 'object',
     'properties': {},
     'additionalProperties': True,
 }
 
-delete_query = copy.deepcopy(show_query)
-delete_query_v275 = copy.deepcopy(show_query_v275)
+defaults_query_v2102 = copy.deepcopy(defaults_query)
+defaults_query_v2102['additionalProperties'] = False
 
 _quota_response = {
     'type': 'object',

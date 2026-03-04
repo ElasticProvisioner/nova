@@ -972,16 +972,26 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         self._test_max_concurrent_builds()
 
     def test_max_concurrent_builds_semaphore_limited(self):
+        utils.destroy_long_task_executor()
         self.flags(max_concurrent_builds=123)
-        self.assertEqual(123,
-                         manager.ComputeManager()._build_semaphore._value)
+        compute = manager.ComputeManager()
+        if utils.concurrency_mode_threading():
+            self.assertIsInstance(
+                compute._build_semaphore, compute_utils.UnlimitedSemaphore)
+            self.assertEqual(123, compute._long_task_executor._max_workers)
+        else:
+            self.assertEqual(123, compute._build_semaphore._value)
 
     def test_max_concurrent_builds_semaphore_unlimited(self):
+        utils.destroy_long_task_executor()
         self.flags(max_concurrent_builds=0)
         compute = manager.ComputeManager()
-        self.assertEqual(0, compute._build_semaphore.balance)
-        self.assertIsInstance(compute._build_semaphore,
-                              compute_utils.UnlimitedSemaphore)
+        if utils.concurrency_mode_threading():
+            self.assertIsInstance(
+                compute._build_semaphore, compute_utils.UnlimitedSemaphore)
+            self.assertEqual(10, compute._long_task_executor._max_workers)
+        else:
+            self.assertEqual(1000, compute._build_semaphore._value)
 
     @mock.patch('nova.objects.Instance.save')
     @mock.patch('nova.compute.manager.ComputeManager.'
@@ -1006,16 +1016,46 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         self._test_max_concurrent_snapshots()
 
     def test_max_concurrent_snapshots_semaphore_limited(self):
+        utils.destroy_long_task_executor()
         self.flags(max_concurrent_snapshots=123)
-        self.assertEqual(123,
-                         manager.ComputeManager()._snapshot_semaphore._value)
+        compute = manager.ComputeManager()
+        if utils.concurrency_mode_threading():
+            self.assertIsInstance(
+                compute._snapshot_semaphore, compute_utils.UnlimitedSemaphore)
+            self.assertEqual(123, compute._long_task_executor._max_workers)
+        else:
+            self.assertEqual(123, compute._snapshot_semaphore._value)
 
     def test_max_concurrent_snapshots_semaphore_unlimited(self):
+        utils.destroy_long_task_executor()
         self.flags(max_concurrent_snapshots=0)
         compute = manager.ComputeManager()
-        self.assertEqual(0, compute._snapshot_semaphore.balance)
-        self.assertIsInstance(compute._snapshot_semaphore,
-                              compute_utils.UnlimitedSemaphore)
+        if utils.concurrency_mode_threading():
+            self.assertIsInstance(
+                compute._snapshot_semaphore, compute_utils.UnlimitedSemaphore)
+            self.assertEqual(10, compute._long_task_executor._max_workers)
+        else:
+            self.assertEqual(1000, compute._snapshot_semaphore._value)
+
+    @mock.patch.object(manager.LOG, 'warning')
+    def test_max_c_builds_and_snapshots_different_limits(self, mock_log):
+        utils.destroy_long_task_executor()
+        self.flags(max_concurrent_builds=124)
+        self.flags(max_concurrent_snapshots=123)
+        compute = manager.ComputeManager()
+        if utils.concurrency_mode_threading():
+            self.assertEqual(124, compute._long_task_executor._max_workers)
+            mock_log.assert_called_once_with(
+                'In native threading mode the number of concurrent builds, '
+                'and snapshots should be limited to the same number. '
+                'The current configuration has differing limits: '
+                'max_concurrent_builds: %d, max_concurrent_snapshots: %d. '
+                'Nova will use a single, overall limit of %d for these tasks.',
+                124, 123, 124)
+        else:
+            self.assertEqual(123, compute._snapshot_semaphore._value)
+            self.assertEqual(124, compute._build_semaphore._value)
+            mock_log.assert_not_called()
 
     def test_nil_out_inst_obj_host_and_node_sets_nil(self):
         instance = fake_instance.fake_instance_obj(self.context,
@@ -7682,7 +7722,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         bdms = [root_bdm]
         events = [('volume-reimaged', root_bdm.volume_id)]
         image_size_gb = 1
-        deadline = CONF.reimage_timeout_per_gb * image_size_gb
+        timeout = CONF.reimage_timeout_per_gb * image_size_gb
 
         with test.nested(
             mock.patch.object(objects.Instance, 'save',
@@ -7715,7 +7755,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
             mock_get_root_bdm.assert_called_once_with(
                 self.context, instance, bdms)
             wait_inst_event.assert_called_once_with(
-                instance, events, deadline=deadline,
+                instance, events, timeout=timeout,
                 error_callback=self.compute._reimage_failed_callback)
 
     @mock.patch('nova.volume.cinder.API.attachment_delete')
@@ -8661,7 +8701,7 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
             self.context, self.instance, arq_uuids)
 
         mock_wait_inst_ev.assert_called_once_with(
-            self.instance, arq_events, deadline=mock.ANY)
+            self.instance, arq_events, timeout=mock.ANY)
         mock_exit_wait_early.assert_called_once_with(arq_events)
 
         mock_get_arqs.assert_has_calls([
@@ -8691,7 +8731,7 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
             self.context, self.instance, arq_uuids=None)
 
         mock_wait_inst_ev.assert_called_once_with(
-            self.instance, arq_events, deadline=mock.ANY)
+            self.instance, arq_events, timeout=mock.ANY)
         mock_exit_wait_early.assert_called_once_with(arq_events)
 
         mock_get_arqs.assert_has_calls([
@@ -8723,7 +8763,7 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
             self.context, self.instance, arq_uuids)
 
         mock_wait_inst_ev.assert_called_once_with(
-            self.instance, arq_events, deadline=mock.ANY)
+            self.instance, arq_events, timeout=mock.ANY)
         mock_exit_wait_early.assert_not_called()
         self.assertEqual(sorted(ret_arqs), sorted(arq_list))
         mock_get_arqs.assert_has_calls([
@@ -8754,7 +8794,7 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
             self.context, self.instance, arq_uuids)
 
         mock_wait_inst_ev.assert_called_once_with(
-            self.instance, arq_events, deadline=mock.ANY)
+            self.instance, arq_events, timeout=mock.ANY)
         mock_exit_wait_early.assert_not_called()
         mock_get_arqs.assert_not_called()
 
@@ -8783,7 +8823,7 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
             self.context, self.instance, arq_uuids)
 
         mock_wait_inst_ev.assert_called_once_with(
-            self.instance, arq_events, deadline=mock.ANY)
+            self.instance, arq_events, timeout=mock.ANY)
         mock_exit_wait_early.assert_not_called()
         mock_get_arqs.assert_called_once_with(
             self.instance.uuid, only_resolved=True)
@@ -12079,7 +12119,7 @@ class ComputeManagerMigrationTestCase(test.NoDBTestCase,
                 migrate_data)
         self.assertEqual(2, len(wait_for_event.call_args[0][1]))
         self.assertEqual(CONF.vif_plugging_timeout,
-                         wait_for_event.call_args[1]['deadline'])
+                         wait_for_event.call_args[1]['timeout'])
         mock_pre_live_mig.assert_called_once_with(
             self.context, self.instance, None, None, 'dest-host',
             migrate_data)

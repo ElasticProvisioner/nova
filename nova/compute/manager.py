@@ -504,7 +504,7 @@ class ComputeVirtAPI(virtapi.VirtAPI):
                 break
 
     @contextlib.contextmanager
-    def wait_for_instance_event(self, instance, event_names, deadline=300,
+    def wait_for_instance_event(self, instance, event_names, timeout=300,
                                 error_callback=None):
         """Plan to wait for some events, run some code, then wait.
 
@@ -542,7 +542,7 @@ class ComputeVirtAPI(virtapi.VirtAPI):
         :param event_names: A list of event names. Each element is a
                             tuple of strings to indicate (name, tag),
                             where name is required, but tag may be None.
-        :param deadline: Maximum number of seconds we should wait for all
+        :param timeout: Maximum number of seconds we should wait for all
                          of the specified events to arrive.
         :param error_callback: A function to be called if an event arrives
 
@@ -564,7 +564,7 @@ class ComputeVirtAPI(virtapi.VirtAPI):
                 # NOTE(danms): Don't wait for any of the events. They
                 # should all be canceled and fired immediately below,
                 # but don't stick around if not.
-                deadline = 0
+                timeout = 0
         try:
             yield
         except self._exit_early_exc as e:
@@ -581,7 +581,7 @@ class ComputeVirtAPI(virtapi.VirtAPI):
         sw.start()
         try:
             self._wait_for_instance_events(
-                    instance, events, error_callback, timeout=deadline)
+                    instance, events, error_callback, timeout=timeout)
         except exception.InstanceEventTimeout:
             LOG.warning(
                 'Timeout waiting for %(events)s for instance with '
@@ -642,7 +642,7 @@ class ComputeVirtAPI(virtapi.VirtAPI):
 class ComputeManager(manager.Manager):
     """Manages the running instances from creation to destruction."""
 
-    target = messaging.Target(version='6.4')
+    target = messaging.Target(version='6.5')
 
     def __init__(self, compute_driver=None, *args, **kwargs):
         """Load configuration options and connect to the hypervisor."""
@@ -672,37 +672,51 @@ class ComputeManager(manager.Manager):
         self._syncs_in_progress_lock = threading.Lock()
         self.send_instance_updates = (
             CONF.filter_scheduler.track_instance_changes)
-        if CONF.max_concurrent_builds != 0:
-            self._build_semaphore = threading.Semaphore(
-                CONF.max_concurrent_builds)
-        else:
+
+        max_builds = self._get_max_concurrent_builds()
+        max_snapshots = self._get_max_concurrent_snapshots()
+
+        if utils.concurrency_mode_threading():
+            max_tasks = max(max_builds, max_snapshots)
+
+            if max_builds != max_snapshots:
+                LOG.warning(
+                    "In native threading mode the number of concurrent "
+                    "builds, and snapshots should be limited to the "
+                    "same number. The current configuration has differing "
+                    "limits: max_concurrent_builds: %d, "
+                    "max_concurrent_snapshots: %d. "
+                    "Nova will use a single, overall limit of %d for these "
+                    "tasks.",
+                    max_builds, max_snapshots, max_tasks)
+
+            self._long_task_executor = utils.get_long_task_executor(max_tasks)
+
+            # In threading mode we want to use the size of the executor to
+            # act as the limit of concurrent execution. So neuter the
+            # semaphores here.
+            # TODO(gibi): remove the semaphores once eventlet mode is removed
             self._build_semaphore = compute_utils.UnlimitedSemaphore()
-        if CONF.max_concurrent_snapshots > 0:
-            self._snapshot_semaphore = threading.Semaphore(
-                CONF.max_concurrent_snapshots)
-        else:
             self._snapshot_semaphore = compute_utils.UnlimitedSemaphore()
-        if CONF.max_concurrent_live_migrations > 0:
-            self._live_migration_executor = nova.utils.create_executor(
-                max_workers=CONF.max_concurrent_live_migrations)
+
         else:
-            # setting CONF.max_concurrent_live_migrations to 0 (unlimited)
-            # is deprecated but still supported, so we need to use a sane
-            # default values for each threading mode
-            LOG.warning("Nova compute deprecated the support of unlimited "
-                        "parallel live migration so "
-                        "[DEFAULT]max_concurrent_live_migrations configured "
-                        "with value 0 is deprecated and will not be supported "
-                        "in future releases. Please set an explicit positive"
-                        "value to this config option instead.")
-            if utils.concurrency_mode_threading():
-                self._live_migration_executor = nova.utils.create_executor(
-                    max_workers=5)
-            else:
-                # In eventlet mode we need to keep backward compatibility and
-                # 1000 greenthreads to emulate unlimited.
-                self._live_migration_executor = nova.utils.create_executor(
-                    max_workers=1000)
+            # In eventlet mode we use the individual semaphores to limit
+            # the concurrent tasks, so just create a big Executor to
+            # potentially host all of them
+            self._long_task_executor = utils.get_long_task_executor(
+                max_builds + max_snapshots)
+
+            self._build_semaphore = threading.Semaphore(max_builds)
+            self._snapshot_semaphore = threading.Semaphore(max_snapshots)
+
+        # While live migration is a long-running task we cannot put it into
+        # the same long_task_executor as build and snapshot as we need:
+        # 1. a very small limit of concurrent live migrations compared to
+        #    builds and snapshots
+        # 2. a way to cancel live migrations easily that are waiting due to the
+        #    limit
+        self._live_migration_executor = nova.utils.create_executor(
+            max_workers=self._get_max_concurrent_live_migrations())
 
         # This is a dict, keyed by instance uuid, to a two-item tuple of
         # migration object and Future for the queued live migration.
@@ -721,6 +735,68 @@ class ComputeManager(manager.Manager):
         self.driver = driver.load_compute_driver(self.virtapi, compute_driver)
         self.rt = resource_tracker.ResourceTracker(
             self.host, self.driver, reportclient=self.reportclient)
+
+    def _get_max_concurrent_builds(self):
+        if CONF.max_concurrent_builds > 0:
+            return CONF.max_concurrent_builds
+
+        # setting CONF.max_concurrent_builds to 0 (unlimited)
+        # is deprecated but still supported, so we need to use a sane
+        # default values for each threading mode
+        LOG.warning("Nova compute deprecated the support of unlimited "
+                    "parallel instance builds so "
+                    "[DEFAULT]max_concurrent_builds configured "
+                    "with value 0 is deprecated and will not be supported "
+                    "in future releases. Please set an explicit positive "
+                    "value to this config option instead.")
+        if utils.concurrency_mode_threading():
+            # Fall back to the default of the config
+            return 10
+        else:
+            # In eventlet mode we need to keep backward compatibility, and
+            # we use 1000 to emulate unlimited
+            return 1000
+
+    def _get_max_concurrent_snapshots(self):
+        if CONF.max_concurrent_snapshots > 0:
+            return CONF.max_concurrent_snapshots
+
+        # setting CONF.max_concurrent_snapshots to 0 (unlimited)
+        # is deprecated but still supported, so we need to use a sane
+        # default values for each threading mode
+        LOG.warning("Nova compute deprecated the support of unlimited "
+                    "parallel instance snapshots so "
+                    "[DEFAULT]max_concurrent_snapshots configured "
+                    "with value 0 is deprecated and will not be supported "
+                    "in future releases. Please set an explicit positive "
+                    "value to this config option instead.")
+        if utils.concurrency_mode_threading():
+            # Fall back to the default of the config
+            return 5
+        else:
+            # In eventlet mode we need to keep backward compatibility, and
+            # we use 1000 to emulate unlimited
+            return 1000
+
+    def _get_max_concurrent_live_migrations(self):
+        if CONF.max_concurrent_live_migrations > 0:
+            return CONF.max_concurrent_live_migrations
+
+        # setting CONF.max_concurrent_live_migrations to 0 (unlimited)
+        # is deprecated but still supported, so we need to use a sane
+        # default values for each threading mode
+        LOG.warning("Nova compute deprecated the support of unlimited "
+                    "parallel live migration so "
+                    "[DEFAULT]max_concurrent_live_migrations configured "
+                    "with value 0 is deprecated and will not be supported "
+                    "in future releases. Please set an explicit positive"
+                    "value to this config option instead.")
+        if utils.concurrency_mode_threading():
+            return 5
+        else:
+            # In eventlet mode we need to keep backward compatibility and
+            # 1000 greenthreads to emulate unlimited
+            return 1000
 
     @contextlib.contextmanager
     def syncs_in_progress(self) -> Iterator[set[str]]:
@@ -1842,6 +1918,10 @@ class ComputeManager(manager.Manager):
         self.instance_events.cancel_all_events()
         self.driver.cleanup_host(host=self.host)
         self._cleanup_live_migrations_in_pool()
+        # NOTE: graceful shutdown needs to take care of the executors
+        # self._sync_power_executor.shutdown()
+        # utils.destroy_long_task_executor()
+        # utils.destroy_default_executor()
 
     def _cleanup_live_migrations_in_pool(self):
         # Shutdown the pool so we don't get new requests.
@@ -2477,7 +2557,8 @@ class ComputeManager(manager.Manager):
         # NOTE(danms): We spawn here to return the RPC worker thread back to
         # the pool. Since what follows could take a really long time, we don't
         # want to tie up RPC workers.
-        utils.spawn(_locked_do_build_and_run_instance,
+        utils.spawn_on(self._long_task_executor,
+                    _locked_do_build_and_run_instance,
                     context, instance, image, request_spec,
                     filter_properties, admin_password, injected_files,
                     requested_networks, security_groups,
@@ -3048,7 +3129,7 @@ class ComputeManager(manager.Manager):
 
         timeout = CONF.arq_binding_timeout
         with self.virtapi.wait_for_instance_event(
-                instance, events, deadline=timeout):
+                instance, events, timeout=timeout):
             resolved_arqs = cyclient.get_arqs_for_instance(
                     instance.uuid, only_resolved=True)
             # Events for these resolved ARQs may have already arrived.
@@ -3782,14 +3863,14 @@ class ComputeManager(manager.Manager):
             raise exception.BuildAbortException(
                 instance_uuid=instance.uuid, reason=msg)
         image_size = int(math.ceil(float(image.get('size')) / units.Gi))
-        deadline = CONF.reimage_timeout_per_gb * image_size
+        timeout = CONF.reimage_timeout_per_gb * image_size
         error_cb = self._reimage_failed_callback
 
         # Call cinder to perform reimage operation and wait until an
         # external event is triggered.
         try:
             with self.virtapi.wait_for_instance_event(instance, events,
-                                                      deadline=deadline,
+                                                      timeout=timeout,
                                                       error_callback=error_cb):
                 self.volume_api.reimage_volume(
                     context, root_bdm.volume_id, image_id,
@@ -4645,10 +4726,24 @@ class ComputeManager(manager.Manager):
                       instance=instance)
             return
 
-        with self._snapshot_semaphore:
-            self._snapshot_instance(context, image_id, instance,
-                                    task_states.IMAGE_SNAPSHOT)
+        def do_snapshot_instance(
+            context, image_id, instance, expected_task_state
+        ):
+            with self._snapshot_semaphore:
+                self._snapshot_instance(context, image_id, instance,
+                                        expected_task_state)
 
+        # NOTE(gibi): We spawn a separate task as this can be a long-running
+        # operation, and we want to return the RPC worker to its executor to
+        # avoid blocking RPC traffic.
+        return utils.spawn_on(
+            self._long_task_executor, do_snapshot_instance, context,
+            image_id, instance, task_states.IMAGE_SNAPSHOT)
+
+    @wrap_exception()
+    @reverts_task_state
+    @wrap_instance_fault
+    @delete_image_on_error
     def _snapshot_instance(self, context, image_id, instance,
                            expected_task_state):
         context = context.elevated()
@@ -9616,7 +9711,7 @@ class ComputeManager(manager.Manager):
             else:
                 disk = None
 
-            deadline = CONF.vif_plugging_timeout
+            timeout = CONF.vif_plugging_timeout
             error_cb = self._neutron_failed_live_migration_callback
             # In order to avoid a race with the vif plugging that the virt
             # driver does on the destination host, we register our events
@@ -9624,7 +9719,7 @@ class ComputeManager(manager.Manager):
             # dest host reports back that we shouldn't wait, we can break
             # out of the context manager using _BreakWaitForInstanceEvent.
             with self.virtapi.wait_for_instance_event(
-                    instance, events, deadline=deadline,
+                    instance, events, timeout=timeout,
                     error_callback=error_cb):
                 with timeutils.StopWatch() as timer:
                     # TODO(mriedem): The "block_migration" parameter passed

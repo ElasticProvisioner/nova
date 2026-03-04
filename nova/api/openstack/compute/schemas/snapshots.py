@@ -12,6 +12,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import copy
+
 from nova.api.validation import parameter_types
 
 create = {
@@ -51,6 +53,9 @@ show_query = {
     'properties': {},
     'additionalProperties': True
 }
+
+show_query_v2102 = copy.deepcopy(show_query)
+show_query_v2102['additionalProperties'] = False
 
 _snapshot_response = {
     'type': 'object',

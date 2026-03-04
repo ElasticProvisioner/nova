@@ -73,6 +73,8 @@ show_response = {
     'additionalProperties': False
 }
 
+delete_response = {'type': 'null'}
+
 index_response = {
     'title': 'Server shares',
     'type': 'object',

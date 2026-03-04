@@ -1294,9 +1294,44 @@ query string parameters.
 .. _microversion 2.100:
 
 2.100 (Maximum in 2025.1 Epoxy and 2025.2 Flamingo)
------------------------------------------------------
+---------------------------------------------------
 
 The ``GET /servers/{server_id}``, ``GET /servers/detail``
 ``PUT /servers/{server_id}`` and ``POST /server/{server_id}/action``
 (rebuild) responses now include the scheduler hints provided during
 server creation.
+
+.. _microversion 2.101:
+
+2.101
+-----
+
+Attaching a volume via ``POST /servers/{server_id}/os-volume_attachments``
+returns an HTTP 202 Accepted response instead of the previous HTTP 200
+containing a ``volumeAttachment`` object. The response is now fully aync and
+does not wait for reserving a device name. Like before, callers need to watch
+the volume's state and/or server actions to recognize when the
+volume-attachment process finished.
+
+.. _microversion 2.102:
+
+2.102
+-----
+
+The ``GET /flavors`` API now accepts a ``name`` filter to filter the returned
+flavors by name. In addition, the ``rxtx_factor`` and
+``OS-FLV-DISABLED:disabled`` fields have been removed from all flavors
+responses, while the ``rxtx_factor`` field can no longer be provided when
+creating a server and the ``rxtx_factor`` filter can no longer be provided when
+listing flavors. Finally, all APIs now reject unknown query string parameters
+with a HTTP 400 (Bad Request) error, building upon work first started in
+microversion 2.75.
+
+.. _microversion 2.103:
+
+2.103 (Maximum in 2026.1 Gazpacho)
+----------------------------------
+
+The ``/os-volumes_boot`` API is an old alias for the ``/servers`` API and was
+undocumented and untested. It has now been removed and will return HTTP 404 for
+all requests.

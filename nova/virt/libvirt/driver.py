@@ -2043,7 +2043,7 @@ class LibvirtDriver(driver.ComputeDriver):
         # the instance directory and disk.info on init, this condition will
         # need to be re-visited to make sure that backend doesn't re-create
         # the disk. Refer to bugs: 1666831 1728603 1769131
-        if self.image_backend.backend(CONF.libvirt.images_type).SUPPORTS_CLONE:
+        if self.image_backend.backend().SUPPORTS_CLONE:
             root_disk = self.image_backend.by_name(instance, 'disk')
             if root_disk.exists():
                 root_disk.remove_snap(libvirt_utils.RESIZE_SNAPSHOT_NAME)
@@ -8414,7 +8414,7 @@ class LibvirtDriver(driver.ComputeDriver):
         pause = bool(events)
         try:
             with self.virtapi.wait_for_instance_event(
-                instance, events, deadline=timeout,
+                instance, events, timeout=timeout,
                 error_callback=self._neutron_failed_callback,
             ):
                 self.plug_vifs(instance, network_info)
@@ -10954,9 +10954,7 @@ class LibvirtDriver(driver.ComputeDriver):
                 raise exception.VTPMSecretNotFound(msg)
 
             dest_check_data.vtpm_secret_uuid = secret.UUIDString()
-            # Have to decode the bytes type to conform to the object's
-            # SensitiveStringField type.
-            dest_check_data.vtpm_secret_value = secret.value().decode()
+            dest_check_data.vtpm_secret_value_bytes = secret.value()
         else:
             # If the instance has a vTPM, set the relevant fields to None in
             # order to convey that we are actively choosing not to pass any
@@ -12065,9 +12063,7 @@ class LibvirtDriver(driver.ComputeDriver):
         if migrate_data.has_vtpm_secret_data:
             self._host.create_secret(
                 'vtpm', instance.uuid,
-                # Convert the SensitiveStringField back to bytes when creating
-                # the libvirt secret.
-                password=migrate_data.vtpm_secret_value.encode(),
+                password=migrate_data.vtpm_secret_value_bytes,
                 uuid=migrate_data.vtpm_secret_uuid, ephemeral=False,
                 private=False)
 

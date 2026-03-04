@@ -139,7 +139,8 @@ class InstanceActionsController(wsgi.Controller):
         return actions_dict
 
     @wsgi.expected_errors(404)
-    @validation.query_schema(schema.show_query)
+    @validation.query_schema(schema.show_query, '2.1', '2.101')
+    @validation.query_schema(schema.show_query_v2102, '2.102')
     @validation.response_body_schema(schema.show_response, "2.1", "2.50")
     @validation.response_body_schema(schema.show_response_v251, "2.51", "2.57")
     @validation.response_body_schema(schema.show_response_v258, "2.58", "2.61")

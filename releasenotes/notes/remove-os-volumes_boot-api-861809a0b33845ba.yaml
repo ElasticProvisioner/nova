@@ -1,0 +1,6 @@
+---
+upgrade:
+  - |
+    The v2.103 microversion has been introduced. This deprecates the hitherto
+    undocumented ``/os-volumes_boot`` API. HTTP 404 will be returned for all
+    requests starting with this API microversion.

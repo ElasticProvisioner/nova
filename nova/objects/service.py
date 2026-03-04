@@ -37,7 +37,7 @@ __all__ = [
 
 
 # NOTE(danms): This is the global service version counter
-SERVICE_VERSION = 70
+SERVICE_VERSION = 72
 
 
 # NOTE(danms): This is our SERVICE_VERSION history. The idea is that any
@@ -249,6 +249,12 @@ SERVICE_VERSION_HISTORY = (
     # Version 70: Compute RPC v6.4:
     # Compute manager supports USB controller model traits
     {'compute_rpc': '6.4'},
+    # Version 71: Compute RPC v6.5:
+    # Add 2nd RPC server for compute service
+    {'compute_rpc': '6.5'},
+    # Version 72: Compute RPC v6.5:
+    # Add support for vTPM live migration
+    {'compute_rpc': '6.5'},
 )
 
 # This is the version after which we can rely on having a persistent

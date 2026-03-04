@@ -1,0 +1,163 @@
+{
+    "flavors": [
+        {
+            "OS-FLV-EXT-DATA:ephemeral": 0,
+            "description": null,
+            "disk": 1,
+            "extra_specs": {},
+            "id": "1",
+            "links": [
+                {
+                    "href": "http://openstack.example.com/v2.1/6f70656e737461636b20342065766572/flavors/1",
+                    "rel": "self"
+                },
+                {
+                    "href": "http://openstack.example.com/6f70656e737461636b20342065766572/flavors/1",
+                    "rel": "bookmark"
+                }
+            ],
+            "name": "m1.tiny",
+            "os-flavor-access:is_public": true,
+            "ram": 512,
+            "swap": 0,
+            "vcpus": 1
+        },
+        {
+            "OS-FLV-EXT-DATA:ephemeral": 0,
+            "description": null,
+            "disk": 20,
+            "extra_specs": {},
+            "id": "2",
+            "links": [
+                {
+                    "href": "http://openstack.example.com/v2.1/6f70656e737461636b20342065766572/flavors/2",
+                    "rel": "self"
+                },
+                {
+                    "href": "http://openstack.example.com/6f70656e737461636b20342065766572/flavors/2",
+                    "rel": "bookmark"
+                }
+            ],
+            "name": "m1.small",
+            "os-flavor-access:is_public": true,
+            "ram": 2048,
+            "swap": 0,
+            "vcpus": 1
+        },
+        {
+            "OS-FLV-EXT-DATA:ephemeral": 0,
+            "description": null,
+            "disk": 40,
+            "extra_specs": {},
+            "id": "3",
+            "links": [
+                {
+                    "href": "http://openstack.example.com/v2.1/6f70656e737461636b20342065766572/flavors/3",
+                    "rel": "self"
+                },
+                {
+                    "href": "http://openstack.example.com/6f70656e737461636b20342065766572/flavors/3",
+                    "rel": "bookmark"
+                }
+            ],
+            "name": "m1.medium",
+            "os-flavor-access:is_public": true,
+            "ram": 4096,
+            "swap": 0,
+            "vcpus": 2
+        },
+        {
+            "OS-FLV-EXT-DATA:ephemeral": 0,
+            "description": null,
+            "disk": 80,
+            "extra_specs": {},
+            "id": "4",
+            "links": [
+                {
+                    "href": "http://openstack.example.com/v2.1/6f70656e737461636b20342065766572/flavors/4",
+                    "rel": "self"
+                },
+                {
+                    "href": "http://openstack.example.com/6f70656e737461636b20342065766572/flavors/4",
+                    "rel": "bookmark"
+                }
+            ],
+            "name": "m1.large",
+            "os-flavor-access:is_public": true,
+            "ram": 8192,
+            "swap": 0,
+            "vcpus": 4
+        },
+        {
+            "OS-FLV-EXT-DATA:ephemeral": 0,
+            "description": null,
+            "disk": 160,
+            "extra_specs": {},
+            "id": "5",
+            "links": [
+                {
+                    "href": "http://openstack.example.com/v2.1/6f70656e737461636b20342065766572/flavors/5",
+                    "rel": "self"
+                },
+                {
+                    "href": "http://openstack.example.com/6f70656e737461636b20342065766572/flavors/5",
+                    "rel": "bookmark"
+                }
+            ],
+            "name": "m1.xlarge",
+            "os-flavor-access:is_public": true,
+            "ram": 16384,
+            "swap": 0,
+            "vcpus": 8
+        },
+        {
+            "OS-FLV-EXT-DATA:ephemeral": 0,
+            "description": null,
+            "disk": 1,
+            "extra_specs": {
+                "hw:numa_nodes": "1"
+            },
+            "id": "6",
+            "links": [
+                {
+                    "href": "http://openstack.example.com/v2.1/6f70656e737461636b20342065766572/flavors/6",
+                    "rel": "self"
+                },
+                {
+                    "href": "http://openstack.example.com/6f70656e737461636b20342065766572/flavors/6",
+                    "rel": "bookmark"
+                }
+            ],
+            "name": "m1.tiny.specs",
+            "os-flavor-access:is_public": true,
+            "ram": 512,
+            "swap": 0,
+            "vcpus": 1
+        },
+        {
+            "OS-FLV-EXT-DATA:ephemeral": 0,
+            "description": "test description",
+            "disk": 20,
+            "extra_specs": {
+                "hw:cpu_policy": "shared",
+                "hw:numa_nodes": "1"
+            },
+            "id": "7",
+            "links": [
+                {
+                    "href": "http://openstack.example.com/v2.1/6f70656e737461636b20342065766572/flavors/7",
+                    "rel": "self"
+                },
+                {
+                    "href": "http://openstack.example.com/6f70656e737461636b20342065766572/flavors/7",
+                    "rel": "bookmark"
+                }
+            ],
+            "name": "m1.small.description",
+            "os-flavor-access:is_public": true,
+            "ram": 2048,
+            "swap": 0,
+            "vcpus": 1
+        }
+    ]
+}

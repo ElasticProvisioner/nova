@@ -260,7 +260,7 @@ class ComputeTaskManager:
     may involve coordinating activities on multiple compute nodes.
     """
 
-    target = messaging.Target(namespace='compute_task', version='1.25')
+    target = messaging.Target(namespace='compute_task', version='1.26')
 
     def __init__(self):
         self.compute_rpcapi = compute_rpcapi.ComputeAPI()
@@ -2240,3 +2240,62 @@ class ComputeTaskManager:
         task = cross_cell_migrate.RevertResizeTask(
             context, instance, migration, self.notifier, self.compute_rpcapi)
         task.execute()
+
+    def _create_volume_bdm(self, context, instance, device, volume,
+                           disk_bus, device_type, tag=None,
+                           delete_on_termination=False):
+        volume_id = volume['id']
+        # NOTE(vish): This is done on the compute host because we want
+        #             to avoid a race where two devices are requested at
+        #             the same time. When db access is removed from
+        #             compute, the bdm will be created here and we will
+        #             have to make sure that they are assigned atomically.
+        volume_bdm = self.compute_rpcapi.reserve_block_device_name(
+            context, instance, device, volume_id, disk_bus=disk_bus,
+            device_type=device_type, tag=tag,
+            multiattach=volume['multiattach'])
+        volume_bdm.delete_on_termination = delete_on_termination
+        volume_bdm.save()
+        return volume_bdm
+
+    @targets_cell
+    def attach_volume(self, context, instance, volume, device, disk_bus,
+            device_type, tag=None, supports_multiattach=False,
+            delete_on_termination=False):
+        """Attach an existing volume to an existing instance.
+
+        This method lives in conductor so it can do the synchronous call to
+        compute for reserving a block-device mapping instead of having nova-api
+        do it starting with API version 2.101.
+        """
+        try:
+            volume_bdm = self._create_volume_bdm(
+                context, instance, device, volume, disk_bus=disk_bus,
+                device_type=device_type, tag=tag,
+                delete_on_termination=delete_on_termination)
+        except messaging.exceptions.MessagingTimeout:
+            # The compute node might have already created the attachment but
+            # we never received the answer. In this case it is safe to delete
+            # the attachment as nobody will ever pick it up again.
+            with excutils.save_and_reraise_exception():
+                try:
+                    objects.BlockDeviceMapping.get_by_volume_and_instance(
+                        context, volume['id'], instance.uuid).destroy()
+                    LOG.debug("Delete BDM after compute did not respond to "
+                              f"attachment request for volume {volume['id']}")
+                except exception.VolumeBDMNotFound:
+                    LOG.debug("BDM not found, ignoring removal. "
+                              f"Error attaching volume {volume['id']}")
+        try:
+            compute_utils.check_attach_and_reserve_volume(
+                context, self.volume_api, volume, instance, volume_bdm,
+                supports_multiattach)
+            objects.InstanceAction.action_start(
+                context, instance.uuid, instance_actions.ATTACH_VOLUME,
+                want_result=False)
+            self.compute_rpcapi.attach_volume(context, instance, volume_bdm)
+        except Exception:
+            with excutils.save_and_reraise_exception():
+                volume_bdm.destroy()
+
+        return volume_bdm.device_name

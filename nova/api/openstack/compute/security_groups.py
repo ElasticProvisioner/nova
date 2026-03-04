@@ -366,7 +366,8 @@ class ServerSecurityGroupController(
 ):
 
     @wsgi.expected_errors(404)
-    @validation.query_schema(schema.index_server_query)
+    @validation.query_schema(schema.index_server_query, '2.1', '2.101')
+    @validation.query_schema(schema.index_server_query_v2102, '2.102')
     @validation.response_body_schema(schema.index_server_response)
     def index(self, req, server_id):
         """Returns a list of security groups for the given instance."""
