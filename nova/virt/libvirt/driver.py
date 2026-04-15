@@ -84,7 +84,6 @@ from nova.console import serial as serial_console
 from nova.console import type as ctype
 from nova import context as nova_context
 from nova import crypto
-from nova.db import constants as db_const
 from nova import exception
 from nova.i18n import _
 from nova.image import glance
@@ -7034,12 +7033,9 @@ class LibvirtDriver(driver.ComputeDriver):
             membacking.sharedaccess = True
             membacking.allocateimmediate = True
             membacking.discard = True
-        if self._get_mem_encryption_config(flavor, image_meta):
-            if not membacking:
-                membacking = vconfig.LibvirtConfigGuestMemoryBacking()
-            membacking.locked = True
 
-        if hardware.get_locked_memory_constraint(flavor, image_meta):
+        mtype = libvirt_utils.get_machine_type(image_meta)
+        if hardware.get_locked_memory_constraint(flavor, image_meta, mtype):
             if not membacking:
                 membacking = vconfig.LibvirtConfigGuestMemoryBacking()
             membacking.locked = True
@@ -7813,6 +7809,20 @@ class LibvirtDriver(driver.ComputeDriver):
                                                       mach_type)
 
     def _guest_configure_mem_encryption(self, guest, arch, mach_type, model):
+        if model in (fields.MemEncryptionModel.AMD_SEV,
+                     fields.MemEncryptionModel.AMD_SEV_ES):
+            self._guest_configure_sev_mem_encryption(
+                guest, arch, mach_type, model)
+        else:
+            raise exception.Invalid(
+                "Unknown MemEncryptionModel: %(model)s. "
+                "Supported models: %(supported)s" % {
+                    'model': model,
+                    'supported': ', '.join(fields.MemEncryptionModel.ALL)
+                })
+
+    def _guest_configure_sev_mem_encryption(
+        self, guest, arch, mach_type, model):
         sev = self._find_sev_feature(arch, mach_type)
         if sev is None:
             # In theory this should never happen because it should
@@ -9924,66 +9934,23 @@ class LibvirtDriver(driver.ComputeDriver):
                     }
                 }
         """
-        conf_slots = CONF.libvirt.num_memory_encrypted_guests
 
-        if not self._host.supports_amd_sev:
-            if conf_slots and conf_slots > 0:
-                LOG.warning("Host is configured with "
-                            "libvirt.num_memory_encrypted_guests set to "
-                            "%d, but is not SEV-capable.", conf_slots)
-            return {
-                'amd_sev': {
-                    'total': 0
-                },
-                'amd_sev_es': {
-                    'total': 0
-                }
-            }
+        inventories = self._host.get_mem_encryption_inventories()
+        slots_strs = []
 
-        sev_slots = db_const.MAX_INT
+        for model_name, attrs in inventories.items():
+            supported = attrs.pop('supported')
+            if supported:
+                attrs.setdefault('step_size', 1)
+                attrs.setdefault('max_unit', 1)
+                attrs.setdefault('min_unit', 1)
+                attrs.setdefault('allocation_ratio', 1.0)
+                attrs.setdefault('reserved', 0)
+            else:
+                attrs['total'] = 0
+            slots_strs.append('%s=%d' % (model_name, attrs['total']))
 
-        if self._host.max_sev_guests is not None:
-            sev_slots = self._host.max_sev_guests
-
-        if conf_slots is not None:
-            if conf_slots > sev_slots:
-                LOG.warning("Host is configured with "
-                            "libvirt.num_memory_encrypted_guests set to %d, "
-                            "but supports only %d.", conf_slots, sev_slots)
-            sev_slots = min(sev_slots, conf_slots)
-
-        inventories = {
-            'amd_sev': {
-                'total': sev_slots,
-                'step_size': 1,
-                'max_unit': 1,
-                'min_unit': 1,
-                'allocation_ratio': 1.0,
-                'reserved': 0,
-                'traits': [ot.HW_CPU_X86_AMD_SEV]
-            }
-        }
-
-        sev_es_slots = 0
-        if self._host.supports_amd_sev_es:
-            if self._host.max_sev_es_guests is not None:
-                sev_es_slots = self._host.max_sev_es_guests
-            inventories['amd_sev_es'] = {
-                'total': sev_es_slots,
-                'step_size': 1,
-                'max_unit': 1,
-                'min_unit': 1,
-                'allocation_ratio': 1.0,
-                'reserved': 0,
-                'traits': [ot.HW_CPU_X86_AMD_SEV_ES]
-            }
-        else:
-            inventories['amd_sev_es'] = {
-                'total': 0,
-            }
-
-        LOG.debug("Available memory encrypted slots: "
-                  "AMD SEV=%d SEV-ES=%d", sev_slots, sev_es_slots)
+        LOG.debug("Available memory encrypted slots: %s", ' '.join(slots_strs))
         return inventories
 
     @property

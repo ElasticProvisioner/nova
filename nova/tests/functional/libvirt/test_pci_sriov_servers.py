@@ -41,6 +41,7 @@ from nova.tests import fixtures as nova_fixtures
 from nova.tests.fixtures import libvirt as fakelibvirt
 from nova.tests.functional.api import client
 from nova.tests.functional.libvirt import base
+from nova.virt import hardware
 from nova.virt.libvirt import driver
 
 CONF = cfg.CONF
@@ -102,9 +103,7 @@ class _PCIServersTestBase(base.ServersTestBase):
     def setUp(self):
         self.ctxt = context.get_admin_context()
         self.flags(
-            device_spec=self.PCI_DEVICE_SPEC,
-            alias=self.PCI_ALIAS,
-            group='pci'
+            device_spec=self.PCI_DEVICE_SPEC, alias=self.PCI_ALIAS, group="pci"
         )
 
         super(_PCIServersTestBase, self).setUp()
@@ -790,11 +789,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
 
         networks = "none"
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=1, numa_node=0
@@ -869,11 +864,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
 
         networks = "none"
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=1, numa_node=0
@@ -943,11 +934,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
 
         networks = "none"
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=1, numa_node=0
@@ -1028,11 +1015,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
 
         networks = "none"
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=1, numa_node=0
@@ -1102,11 +1085,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
 
         networks = "none"
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=1, numa_node=0
@@ -1176,11 +1155,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
 
         networks = "none"
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=1, numa_node=0
@@ -1250,11 +1225,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
 
         networks = "none"
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=1, numa_node=0
@@ -1333,11 +1304,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
 
         networks = "none"
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=1, numa_node=0
@@ -1416,11 +1383,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
 
         networks = "none"
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=1, numa_node=0
@@ -1505,11 +1468,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
 
         networks = "none"
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=3, numa_node=0
@@ -1616,11 +1575,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
 
         networks = "none"
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=3, numa_node=0
@@ -1717,11 +1672,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
 
         networks = "none"
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=3, numa_node=0
@@ -1819,11 +1770,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
 
         networks = "none"
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=3, numa_node=0
@@ -1915,11 +1862,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
 
         networks = "none"
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=4, numa_node=0,
@@ -1969,6 +1912,113 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
         self.assertPCIDeviceCounts(self.comp1, total=8, free=6)
         self._assertDeviceAddressesMapped(src_xml, dst_xml)
 
+    def test_live_migrate_VF_fails_with_pci_in_placement_no_lm(self):
+        """Live migration should fail when device is not live migratable
+        and PCI in placement is enabled. The HW_PCI_LIVE_MIGRATABLE trait
+        should not be present on the resource provider.
+        """
+
+        PCI_DEVICE_SPEC = [jsonutils.dumps(x) for x in (
+            {
+                "vendor_id": fakelibvirt.PCI_VEND_ID,
+                "product_id": fakelibvirt.VF_PROD_ID,
+                "live_migratable": "no",
+                "address": {
+                    "domain": "00",
+                    "bus": "8[1-2]",
+                    "slot": "00",
+                    "function": "1",
+                },
+                "resource_class": "CUSTOM_A16_16A",
+            },
+        )]
+
+        PCI_ALIAS = [jsonutils.dumps(x) for x in (
+            {
+                "name": f"{self.VFS_ALIAS_NAME}",
+                "resource_class": "CUSTOM_A16_16A",
+                "device_type": fields.PciDeviceType.SRIOV_VF,
+                "live_migratable": "no",
+            },
+        )]
+
+        self.flags(group="pci", report_in_placement=True)
+        self.flags(group='filter_scheduler', pci_in_placement=True)
+
+        extra_spec = {"pci_passthrough:alias": f"{self.VFS_ALIAS_NAME}:1"}
+
+        networks = "none"
+
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
+
+        src_pci_info = fakelibvirt.HostPCIDevicesInfo(
+            num_pfs=1, num_vfs=1, numa_node=0
+        )
+
+        dst_pci_info = fakelibvirt.HostPCIDevicesInfo(
+            num_pfs=1, num_vfs=1, numa_node=1, bus=0x82
+        )
+
+        self.comp0 = self.start_compute(
+            hostname="test_compute0",
+            libvirt_version=versionutils.convert_version_to_int(
+                driver.MIN_VFIO_PCI_VARIANT_LIBVIRT_VERSION
+            ),
+            qemu_version=versionutils.convert_version_to_int(
+                driver.MIN_VFIO_PCI_VARIANT_QEMU_VERSION
+            ),
+            pci_info=src_pci_info,
+        )
+
+        self.comp1 = self.start_compute(
+            hostname="test_compute1",
+            libvirt_version=versionutils.convert_version_to_int(
+                driver.MIN_VFIO_PCI_VARIANT_LIBVIRT_VERSION
+            ),
+            qemu_version=versionutils.convert_version_to_int(
+                driver.MIN_VFIO_PCI_VARIANT_QEMU_VERSION
+            ),
+            pci_info=dst_pci_info,
+        )
+
+        flavor_id = self._create_flavor(vcpu=4, extra_spec=extra_spec)
+
+        server = self._create_server(
+            host=self.comp0, flavor_id=flavor_id, networks=networks
+        )
+
+        # Verify HW_PCI_LIVE_MIGRATABLE trait is NOT present
+        self.assert_placement_pci_view(
+            self.comp0,
+            inventories={"0000:81:00.0": {'CUSTOM_A16_16A': 1}},
+            traits={"0000:81:00.0": []},
+            usages={"0000:81:00.0": {'CUSTOM_A16_16A': 1}},
+            allocations={server['id']: {
+                "0000:81:00.0": {'CUSTOM_A16_16A': 1}}},
+        )
+        self.assert_placement_pci_view(
+            self.comp1,
+            inventories={"0000:82:00.0": {'CUSTOM_A16_16A': 1}},
+            traits={"0000:82:00.0": []},
+            usages={"0000:82:00.0": {'CUSTOM_A16_16A': 0}},
+        )
+        self.assertPCIDeviceCounts(self.comp0, total=1, free=0)
+        self.assertPCIDeviceCounts(self.comp1, total=1, free=1)
+
+        # Live migration should fail
+        exc = self.assertRaises(
+            client.OpenStackApiException,
+            self._live_migrate,
+            server,
+            "completed",
+        )
+        self.assertEqual(500, exc.response.status_code)
+        self.assertIn('NoValidHost', str(exc))
+
+        self.assertPCIDeviceCounts(self.comp0, total=1, free=0)
+        self.assertPCIDeviceCounts(self.comp1, total=1, free=1)
+        self._wait_for_state_change(server, 'ACTIVE')
+
     def test_live_migrate_VF_success_with_pci_in_placement(self):
         PCI_DEVICE_SPEC = [jsonutils.dumps(x) for x in (
             {
@@ -2001,11 +2051,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
 
         networks = "none"
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=1, numa_node=0
@@ -2046,7 +2092,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
         self.assert_placement_pci_view(
             self.comp0,
             inventories={"0000:81:00.0": {'CUSTOM_A16_16A': 1}},
-            traits={"0000:81:00.0": []},
+            traits={"0000:81:00.0": ["HW_PCI_LIVE_MIGRATABLE"]},
             usages={"0000:81:00.0": {'CUSTOM_A16_16A': 1}},
             allocations={server['id']: {
                 "0000:81:00.0": {'CUSTOM_A16_16A': 1}}},
@@ -2054,7 +2100,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
         self.assert_placement_pci_view(
             self.comp1,
             inventories={"0000:82:00.0": {'CUSTOM_A16_16A': 1}},
-            traits={"0000:82:00.0": []},
+            traits={"0000:82:00.0": ["HW_PCI_LIVE_MIGRATABLE"]},
             usages={"0000:82:00.0": {'CUSTOM_A16_16A': 0}},
         )
         src_xml = self._get_xml(self.comp0, server)
@@ -2065,13 +2111,13 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
         self.assert_placement_pci_view(
             self.comp0,
             inventories={"0000:81:00.0": {'CUSTOM_A16_16A': 1}},
-            traits={"0000:81:00.0": []},
+            traits={"0000:81:00.0": ["HW_PCI_LIVE_MIGRATABLE"]},
             usages={"0000:81:00.0": {'CUSTOM_A16_16A': 0}},
         )
         self.assert_placement_pci_view(
             self.comp1,
             inventories={"0000:82:00.0": {'CUSTOM_A16_16A': 1}},
-            traits={"0000:82:00.0": []},
+            traits={"0000:82:00.0": ["HW_PCI_LIVE_MIGRATABLE"]},
             usages={"0000:82:00.0": {'CUSTOM_A16_16A': 1}},
             allocations={server['id']: {
                 "0000:82:00.0": {'CUSTOM_A16_16A': 1}}},
@@ -2113,11 +2159,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
 
         networks = "none"
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=3, numa_node=0
@@ -2158,7 +2200,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
         self.assert_placement_pci_view(
             self.comp0,
             inventories={"0000:81:00.0": {'CUSTOM_A16_16A': 3}},
-            traits={"0000:81:00.0": []},
+            traits={"0000:81:00.0": ["HW_PCI_LIVE_MIGRATABLE"]},
             usages={"0000:81:00.0": {'CUSTOM_A16_16A': 2}},
             allocations={server['id']: {
                 "0000:81:00.0": {'CUSTOM_A16_16A': 2}}},
@@ -2166,7 +2208,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
         self.assert_placement_pci_view(
             self.comp1,
             inventories={"0000:82:00.0": {'CUSTOM_A16_16A': 3}},
-            traits={"0000:82:00.0": []},
+            traits={"0000:82:00.0": ["HW_PCI_LIVE_MIGRATABLE"]},
             usages={"0000:82:00.0": {'CUSTOM_A16_16A': 0}},
         )
         src_xml = self._get_xml(self.comp0, server)
@@ -2177,13 +2219,13 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
         self.assert_placement_pci_view(
             self.comp0,
             inventories={"0000:81:00.0": {'CUSTOM_A16_16A': 3}},
-            traits={"0000:81:00.0": []},
+            traits={"0000:81:00.0": ["HW_PCI_LIVE_MIGRATABLE"]},
             usages={"0000:81:00.0": {'CUSTOM_A16_16A': 0}},
         )
         self.assert_placement_pci_view(
             self.comp1,
             inventories={"0000:82:00.0": {'CUSTOM_A16_16A': 3}},
-            traits={"0000:82:00.0": []},
+            traits={"0000:82:00.0": ["HW_PCI_LIVE_MIGRATABLE"]},
             usages={"0000:82:00.0": {'CUSTOM_A16_16A': 2}},
             allocations={server['id']: {
                 "0000:82:00.0": {'CUSTOM_A16_16A': 2}}},
@@ -2260,11 +2302,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
 
         networks = "none"
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=3, numa_node=0,
@@ -2309,7 +2347,10 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
                 "0000:81:00.0": {"CUSTOM_A16_16A": 3},
                 "0000:81:01.0": {"CUSTOM_A16_8A": 3},
             },
-            traits={"0000:81:00.0": [], "0000:81:01.0": []},
+            traits={
+                "0000:81:00.0": ["HW_PCI_LIVE_MIGRATABLE"],
+                "0000:81:01.0": ["HW_PCI_LIVE_MIGRATABLE"],
+            },
             usages={
                 "0000:81:00.0": {"CUSTOM_A16_16A": 1},
                 "0000:81:01.0": {"CUSTOM_A16_8A": 1},
@@ -2327,7 +2368,10 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
                 "0000:82:00.0": {"CUSTOM_A16_16A": 3},
                 "0000:82:01.0": {"CUSTOM_A16_8A": 3},
             },
-            traits={"0000:82:00.0": [], "0000:82:01.0": []},
+            traits={
+                "0000:82:00.0": ["HW_PCI_LIVE_MIGRATABLE"],
+                "0000:82:01.0": ["HW_PCI_LIVE_MIGRATABLE"],
+            },
             usages={
                 "0000:82:00.0": {"CUSTOM_A16_16A": 0},
                 "0000:82:01.0": {"CUSTOM_A16_8A": 0},
@@ -2344,7 +2388,10 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
                 "0000:81:00.0": {"CUSTOM_A16_16A": 3},
                 "0000:81:01.0": {"CUSTOM_A16_8A": 3},
             },
-            traits={"0000:81:00.0": [], "0000:81:01.0": []},
+            traits={
+                "0000:81:00.0": ["HW_PCI_LIVE_MIGRATABLE"],
+                "0000:81:01.0": ["HW_PCI_LIVE_MIGRATABLE"],
+            },
             usages={
                 "0000:81:00.0": {"CUSTOM_A16_16A": 0},
                 "0000:81:01.0": {"CUSTOM_A16_8A": 0},
@@ -2356,7 +2403,10 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
                 "0000:82:00.0": {"CUSTOM_A16_16A": 3},
                 "0000:82:01.0": {"CUSTOM_A16_8A": 3},
             },
-            traits={"0000:82:00.0": [], "0000:82:01.0": []},
+            traits={
+                "0000:82:00.0": ["HW_PCI_LIVE_MIGRATABLE"],
+                "0000:82:01.0": ["HW_PCI_LIVE_MIGRATABLE"],
+            },
             usages={
                 "0000:82:00.0": {"CUSTOM_A16_16A": 1},
                 "0000:82:01.0": {"CUSTOM_A16_8A": 1},
@@ -2421,11 +2471,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
         extra_spec = {"pci_passthrough:alias": f"{self.VFS_ALIAS_NAME}:1"}
         extra_spec.update({'hw:cpu_policy': 'dedicated'})
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=1, numa_node=0
@@ -2626,11 +2672,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
         extra_spec = {"pci_passthrough:alias": f"{self.VFS_ALIAS_NAME}:1"}
         extra_spec.update({'hw:cpu_policy': 'dedicated'})
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=1, numa_node=0
@@ -2773,11 +2815,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
         extra_spec = {"pci_passthrough:alias": f"{self.VFS_ALIAS_NAME}:1"}
         extra_spec.update({'hw:cpu_policy': 'dedicated'})
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=1, numa_node=0
@@ -2962,11 +3000,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
         extra_spec = {"pci_passthrough:alias": f"{self.VFS_ALIAS_NAME}:1"}
         extra_spec.update({'hw:cpu_policy': 'dedicated'})
 
-        self.flags(
-        device_spec=PCI_DEVICE_SPEC,
-            alias=PCI_ALIAS,
-            group='pci'
-        )
+        self.flags(device_spec=PCI_DEVICE_SPEC, alias=PCI_ALIAS, group="pci")
 
         src_pci_info = fakelibvirt.HostPCIDevicesInfo(
             num_pfs=1, num_vfs=1, numa_node=0
@@ -3059,7 +3093,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
         self.assert_placement_pci_view(
             self.comp0,
             inventories={"0000:81:00.0": {'CUSTOM_A16_16A': 1}},
-            traits={"0000:81:00.0": []},
+            traits={"0000:81:00.0": ["HW_PCI_LIVE_MIGRATABLE"]},
             usages={"0000:81:00.0": {'CUSTOM_A16_16A': 1}},
             allocations={server['id']: {
                 "0000:81:00.0": {'CUSTOM_A16_16A': 1}}},
@@ -3067,7 +3101,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
         self.assert_placement_pci_view(
             self.comp1,
             inventories={"0000:82:00.0": {'CUSTOM_A16_16A': 1}},
-            traits={"0000:82:00.0": []},
+            traits={"0000:82:00.0": ["HW_PCI_LIVE_MIGRATABLE"]},
             usages={"0000:82:00.0": {'CUSTOM_A16_16A': 0}},
         )
         src_xml = self._get_xml(self.comp0, server)
@@ -3105,13 +3139,13 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
         self.assert_placement_pci_view(
             self.comp0,
             inventories={"0000:81:00.0": {'CUSTOM_A16_16A': 1}},
-            traits={"0000:81:00.0": []},
+            traits={"0000:81:00.0": ["HW_PCI_LIVE_MIGRATABLE"]},
             usages={"0000:81:00.0": {'CUSTOM_A16_16A': 0}},
         )
         self.assert_placement_pci_view(
             self.comp1,
             inventories={"0000:82:00.0": {'CUSTOM_A16_16A': 1}},
-            traits={"0000:82:00.0": []},
+            traits={"0000:82:00.0": ["HW_PCI_LIVE_MIGRATABLE"]},
             usages={"0000:82:00.0": {'CUSTOM_A16_16A': 1}},
             allocations={server['id']: {
                 "0000:82:00.0": {'CUSTOM_A16_16A': 1}}},
@@ -3717,7 +3751,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
         )
 
     def test_get_server_diagnostics_server_with_VF(self):
-        """Ensure server disagnostics include info on VF-type PCI devices."""
+        """Ensure server diagnostics include info on VF-type PCI devices."""
 
         pci_info = fakelibvirt.HostPCIDevicesInfo()
         self.start_compute(pci_info=pci_info)
@@ -4324,7 +4358,7 @@ class VDPAServersTest(_PCIServersWithMigrationTestBase):
         port = self.neutron.show_port(vdpa_port['id'])['port']
         self.assertEqual(dest, port['binding:host_id'])
 
-    def test_evacute(self):
+    def test_evacuate(self):
         source = self.start_vdpa_compute(hostname='source')
         dest = self.start_vdpa_compute(hostname='dest')
 
@@ -4650,10 +4684,23 @@ class PCIServersTest(_PCIServersTestBase):
         self.assert_placement_pci_view(
             "compute1", **compute1_placement_pci_view)
 
-        # boot one instance with no PCI device to "fill up" NUMA node 0
+        # Fill both NUMA nodes with non-PCI VMs, then delete the one on
+        # NUMA 1 to free resources there. NUMA 0 (the PCI node) stays full.
+        # This proves the PCI boot fails due to NUMA affinity (legacy
+        # policy forbids cross-NUMA PCI), not lack of resources.
         extra_spec = {'hw:cpu_policy': 'dedicated'}
         flavor_id = self._create_flavor(vcpu=4, extra_spec=extra_spec)
-        self._create_server(flavor_id=flavor_id, networks='none')
+        server1 = self._create_server(flavor_id=flavor_id, networks='none')
+        server2 = self._create_server(flavor_id=flavor_id, networks='none')
+
+        # verify NUMA placement: first VM on node 1, second on node 0
+        inst1 = objects.Instance.get_by_uuid(self.ctxt, server1['id'])
+        self.assertEqual(1, inst1.numa_topology.cells[0].id)
+        inst2 = objects.Instance.get_by_uuid(self.ctxt, server2['id'])
+        self.assertEqual(0, inst2.numa_topology.cells[0].id)
+
+        # Delete the VM on NUMA 1 to free resources there
+        self._delete_server(server1)
 
         # now boot one with a PCI device, which should fail to boot
         extra_spec['pci_passthrough:alias'] = '%s:1' % self.ALIAS_NAME
@@ -5311,7 +5358,7 @@ class PCIServersTest(_PCIServersTestBase):
                 'name': 'a2',
             },
         )]
-        self.flags(group='pci', alias=alias)
+        self.flags(group="pci", alias=alias)
         # request two PCI devices both are individually matching with the
         # single available device on the host
         extra_spec = {'pci_passthrough:alias': 'a1:1,a2:1'}
@@ -5720,11 +5767,14 @@ class PCIServersWithPreferredNUMATest(_PCIServersTestBase):
         self.flags(group='filter_scheduler', pci_in_placement=True)
 
     def test_create_server_with_pci_dev_and_numa(self):
-        """Validate behavior of 'preferred' PCI NUMA policy.
+        """Validate that 'preferred' PCI NUMA policy allows cross-NUMA.
 
         This test ensures that it *is* possible to allocate CPU and memory
-        resources from one NUMA node and a PCI device from another *if* PCI
-        NUMA policies are in use.
+        resources from one NUMA node and a PCI device from another when
+        using the 'preferred' NUMA policy. We force a cross-NUMA scenario
+        by filling NUMA 0 (the PCI node) and leaving NUMA 1 free, so the
+        PCI VM must land on NUMA 1 with a cross-NUMA PCI device from
+        NUMA 0.
         """
 
         self.flags(cpu_dedicated_set='0-7', group='compute')
@@ -5746,24 +5796,42 @@ class PCIServersWithPreferredNUMATest(_PCIServersTestBase):
         self.assert_placement_pci_view(
             "compute1", **compute1_placement_pci_view)
 
-        # boot one instance with no PCI device to "fill up" NUMA node 0
+        # Fill both NUMA nodes with non-PCI VMs. The PCI-aware sort
+        # steers the first VM to NUMA 1, the second fills NUMA 0.
         extra_spec = {
             'hw:cpu_policy': 'dedicated',
         }
         flavor_id = self._create_flavor(vcpu=4, extra_spec=extra_spec)
-        self._create_server(flavor_id=flavor_id)
+        server1 = self._create_server(flavor_id=flavor_id)
+        server2 = self._create_server(flavor_id=flavor_id)
+
+        # verify NUMA placement: first VM on node 1, second on node 0
+        inst1 = objects.Instance.get_by_uuid(self.ctxt, server1['id'])
+        self.assertEqual(1, inst1.numa_topology.cells[0].id)
+        inst2 = objects.Instance.get_by_uuid(self.ctxt, server2['id'])
+        self.assertEqual(0, inst2.numa_topology.cells[0].id)
+
+        # Delete the VM on NUMA 1 to free resources there. NUMA 0 (the
+        # PCI node) stays full. This forces the PCI VM to land on NUMA 1
+        # with a cross-NUMA PCI device from NUMA 0.
+        self._delete_server(server1)
 
         self.assert_placement_pci_view(
             "compute1", **compute1_placement_pci_view)
 
-        # now boot one with a PCI device, which should succeed thanks to the
-        # use of the PCI policy
+        # Boot a PCI VM: with 'preferred' policy it should succeed on
+        # NUMA 1 using the PCI device cross-NUMA from NUMA 0.
         extra_spec['pci_passthrough:alias'] = '%s:1' % self.ALIAS_NAME
         flavor_id = self._create_flavor(extra_spec=extra_spec)
         server_with_pci = self._create_server(
             flavor_id=flavor_id, expected_state=self.expected_state)
 
         if self.expected_state == 'ACTIVE':
+            # verify the PCI VM landed on NUMA node 1 (cross-NUMA)
+            inst_with_pci = objects.Instance.get_by_uuid(
+                self.ctxt, server_with_pci['id'])
+            self.assertEqual(1, inst_with_pci.numa_topology.cells[0].id)
+
             compute1_placement_pci_view["usages"][
                 "0000:81:00.0"][self.PCI_RC] = 1
             compute1_placement_pci_view["allocations"][
@@ -5796,6 +5864,73 @@ class PCIServersWithRequiredNUMATest(PCIServersWithPreferredNUMATest):
             )
         )
 
+    def test_create_server_with_pci_dev_and_numa(self):
+        """Validate that 'required' PCI NUMA policy enforces affinity.
+
+        This test proves that the failure is due to PCI NUMA affinity, not
+        lack of resources. We fill NUMA 0 (the PCI node) with a non-PCI VM,
+        then delete the VM on NUMA 1 to free space. A PCI VM with 'required'
+        policy should still fail because it cannot use CPUs from NUMA 1 with
+        a PCI device on NUMA 0.
+        """
+
+        self.flags(cpu_dedicated_set='0-7', group='compute')
+
+        pci_info = fakelibvirt.HostPCIDevicesInfo(num_pci=1, numa_node=0)
+        self.start_compute(pci_info=pci_info)
+        compute1_placement_pci_view = {
+            "inventories": {
+                "0000:81:00.0": {self.PCI_RC: 1},
+            },
+            "traits": {
+                "0000:81:00.0": [],
+            },
+            "usages": {
+                "0000:81:00.0": {self.PCI_RC: 0},
+            },
+            "allocations": {},
+        }
+        self.assert_placement_pci_view(
+            "compute1", **compute1_placement_pci_view)
+
+        # Fill both NUMA nodes with non-PCI VMs.
+        # The PCI-aware sort steers the first VM to NUMA 1, the second
+        # fills NUMA 0.
+        extra_spec = {
+            'hw:cpu_policy': 'dedicated',
+        }
+        flavor_id = self._create_flavor(vcpu=4, extra_spec=extra_spec)
+        server1 = self._create_server(flavor_id=flavor_id)
+        server2 = self._create_server(flavor_id=flavor_id)
+
+        # verify NUMA placement: first VM on node 1, second on node 0
+        inst1 = objects.Instance.get_by_uuid(self.ctxt, server1['id'])
+        self.assertEqual(1, inst1.numa_topology.cells[0].id)
+        inst2 = objects.Instance.get_by_uuid(self.ctxt, server2['id'])
+        self.assertEqual(0, inst2.numa_topology.cells[0].id)
+
+        # Delete the VM on NUMA 1 to free resources there. NUMA 0 (the PCI
+        # node) remains full.
+        self._delete_server(server1)
+
+        self.assert_placement_pci_view(
+            "compute1", **compute1_placement_pci_view)
+
+        # Boot a PCI VM with 'required' NUMA policy. Even though NUMA 1 has
+        # free CPUs, the PCI device is on NUMA 0 (full), and 'required'
+        # policy forbids cross-NUMA allocation → should fail.
+        extra_spec['pci_passthrough:alias'] = '%s:1' % self.ALIAS_NAME
+        flavor_id = self._create_flavor(extra_spec=extra_spec)
+        server_pci = self._create_server(
+            flavor_id=flavor_id, expected_state='ERROR')
+
+        # Verify the instance is in ERROR state
+        self.assertEqual('ERROR', server_pci['status'])
+
+        self.assert_placement_pci_view(
+            "compute1", **compute1_placement_pci_view)
+        self.assert_no_pci_healing("compute1")
+
     def test_create_server_with_pci_dev_and_numa_placement_conflict(self):
         # fakelibvirt will simulate the devices:
         # * one type-PCI in 81.00 on numa 0
@@ -5819,7 +5954,7 @@ class PCIServersWithRequiredNUMATest(PCIServersWithPreferredNUMATest):
                 },
             ]
         )
-        self.flags(group='pci', device_spec=device_spec)
+        self.flags(group="pci", device_spec=device_spec)
         # both numa 0 and numa 1 has 4 PCPUs
         self.flags(cpu_dedicated_set='0-7', group='compute')
         self.start_compute(pci_info=pci_info)
@@ -5991,11 +6126,7 @@ class PCIServersWithSRIOVAffinityPoliciesTest(_PCIServersTestBase):
             }
         )]
 
-        self.flags(
-            device_spec=self.PCI_DEVICE_SPEC,
-            alias=alias,
-            group='pci'
-        )
+        self.flags(device_spec=self.PCI_DEVICE_SPEC, alias=alias, group="pci")
 
         self._test_policy(pci_numa_node, status, 'required')
 
@@ -6211,11 +6342,7 @@ class PCIServersWithPortNUMAPoliciesTest(_PCIServersTestBase):
             }
         )]
 
-        self.flags(
-            device_spec=self.PCI_DEVICE_SPEC,
-            alias=alias,
-            group='pci'
-        )
+        self.flags(device_spec=self.PCI_DEVICE_SPEC, alias=alias, group="pci")
 
         self._test_policy(pci_numa_node, status, 'required')
 
@@ -6866,4 +6993,216 @@ class RemoteManagedServersTest(_PCIServersWithMigrationTestBase):
                 'card_serial_number': 'MT0000X00042',
             },
             port['binding:profile'],
+        )
+
+
+class TestPackNUMACellsWithPCIDevices(_PCIServersTestBase):
+    """Regression test for bug #2144660.
+
+    When using the 'pack' NUMA cell allocation strategy, a VM that does NOT
+    request any PCI device should be placed on a NUMA node that does NOT
+    hold PCI devices, leaving PCI-equipped nodes free for VMs that need them.
+
+    The bug is that the compute claim (claims.py) only passes pci_stats to
+    numa_fit_instance_to_host when the VM has PCI requests. For non-PCI VMs,
+    pci_stats is None, so the PCI-aware sort is skipped and the VM may land
+    on the NUMA node that holds all PCI devices.
+    """
+
+    ADMIN_API = True
+    microversion = 'latest'
+
+    PCI_DEVICE_SPEC = [jsonutils.dumps({
+        'vendor_id': fakelibvirt.PCI_VEND_ID,
+        'product_id': fakelibvirt.PCI_PROD_ID,
+    })]
+    PCI_ALIAS = [jsonutils.dumps({
+        'vendor_id': fakelibvirt.PCI_VEND_ID,
+        'product_id': fakelibvirt.PCI_PROD_ID,
+        'name': 'a1',
+        'device_type': fields.PciDeviceType.STANDARD,
+    })]
+
+    def setUp(self):
+        super().setUp()
+        self.ctxt = context.get_admin_context()
+
+        # Enable pack strategy (default, but be explicit)
+        self.flags(
+            packing_host_numa_cells_allocation_strategy=True,
+            group='compute',
+        )
+
+        # Allow CPU pinning on all 4 NUMA nodes (CPUs 0-7)
+        self.flags(cpu_dedicated_set='0-7', group='compute')
+
+    def _start_compute_with_pci(self, pci_numa_node):
+        """Start a compute with 4 NUMA nodes and PCI devices on a given node.
+
+        :param pci_numa_node: int, the NUMA node index (0-3) where the PCI
+            device will be created.
+
+        - 4 NUMA nodes (0-3), each with 2 CPUs and 4GB RAM with 1GB hugepages
+        - PCI device only on the specified NUMA node
+        """
+        host_info = fakelibvirt.HostInfo(
+            cpu_nodes=4, cpu_sockets=1, cpu_cores=2, cpu_threads=1,
+            kB_mem=(16 * units.Gi) // units.Ki,
+        )
+
+        for cell in host_info.numa_topology.cells:
+            cell.mempages = fakelibvirt.create_mempages([
+                (4, 0),               # no small pages
+                (units.Mi, 4),        # 4 x 1GB hugepages
+            ])
+
+        pci_info = fakelibvirt.HostPCIDevicesInfo(
+            num_pci=1, numa_node=pci_numa_node)
+
+        self.start_compute(
+            hostname='compute1',
+            host_info=host_info,
+            pci_info=pci_info,
+        )
+
+        # Assert that PCI devices are on the expected NUMA node
+        devices = objects.PciDeviceList.get_by_compute_node(
+            self.ctxt,
+            objects.ComputeNode.get_by_nodename(self.ctxt, 'compute1').id,
+        )
+        self.assertTrue(
+            all(d.numa_node == pci_numa_node for d in devices),
+            f"All PCI devices should be on NUMA node {pci_numa_node}.",
+        )
+
+    def test_scheduler_and_claim_agree_on_non_pci_vm_placement(self):
+        """Verify that the scheduler and compute claim agree for non-PCI VMs.
+
+        The scheduler (NUMATopologyFilter) and the compute claim both call
+        numa_fit_instance_to_host. This test spies on both calls to verify
+        they produce the same NUMA placement for a VM that does NOT request
+        any PCI device.
+
+        Setup:
+        - 4 NUMA nodes (0-3), each with 2 CPUs and 4GB RAM with 1GB hugepages
+        - PCI device only on NUMA node 0
+        - Pack strategy enabled
+
+        Expected:
+        - Both the scheduler and the claim should avoid NUMA node 0 (which
+          holds PCI devices) and place the VM on node 1, 2, or 3.
+
+        Bug #2144660: the compute claim does not pass pci_stats when the VM
+        has no PCI requests, so the PCI-aware sort is skipped in the claim
+        and it overrides the scheduler's correct decision, landing the VM
+        on NUMA node 0.
+        """
+        self._start_compute_with_pci(pci_numa_node=0)
+
+        # Wrap numa_fit_instance_to_host to capture the scheduler's result
+        # (first call) separately from the compute claim's result.
+        orig_fit = hardware.numa_fit_instance_to_host
+        fit_results = []
+
+        def spy_numa_fit(*args, **kwargs):
+            result = orig_fit(*args, **kwargs)
+            fit_results.append(result)
+            return result
+
+        with mock.patch(
+            'nova.virt.hardware.numa_fit_instance_to_host',
+            side_effect=spy_numa_fit,
+        ):
+            extra_spec = {
+                'hw:cpu_policy': 'dedicated',
+                'hw:mem_page_size': '1GB',
+            }
+            flavor_id = self._create_flavor(extra_spec=extra_spec)
+            server = self._create_server(
+                flavor_id=flavor_id, networks='none')
+
+        # The scheduler (NUMATopologyFilter) calls numa_fit_instance_to_host
+        # first, then the compute claim calls it again. Both should agree
+        # and avoid the PCI NUMA node.
+        scheduler_result = fit_results[0]
+        self.assertIsNotNone(scheduler_result)
+        self.assertNotEqual(
+            0, scheduler_result.cells[0].id,
+            "The scheduler correctly avoided the PCI NUMA node.",
+        )
+
+        # Verify the final placement matches the scheduler's decision
+        inst = objects.Instance.get_by_uuid(self.ctxt, server['id'])
+        self.assertIsNotNone(inst.numa_topology)
+        self.assertEqual(1, len(inst.numa_topology.cells))
+
+        placed_on_node = inst.numa_topology.cells[0].id
+
+        # With the fix for bug #2144660, the compute claim now passes
+        # pci_stats unconditionally, so the PCI-aware NUMA sort correctly
+        # steers the non-PCI VM away from NUMA node 0 (the PCI node).
+        self.assertNotEqual(0, placed_on_node)
+
+    def test_non_pci_vm_pack_sequential_avoids_pci_node(self):
+        """Launch 3 non-PCI VMs sequentially - none should land on NUMA 0.
+
+        With 4 NUMA nodes (only node 0 has PCI devices) and the pack
+        strategy, all 3 VMs should be placed on nodes 1, 2, 3 — avoiding
+        node 0 which holds PCI devices.
+        """
+        self._start_compute_with_pci(pci_numa_node=0)
+
+        extra_spec = {
+            'hw:cpu_policy': 'dedicated',
+            'hw:mem_page_size': '1GB',
+        }
+        flavor_id = self._create_flavor(extra_spec=extra_spec)
+
+        placed_nodes = []
+        for i in range(3):
+            server = self._create_server(
+                flavor_id=flavor_id, networks='none')
+            inst = objects.Instance.get_by_uuid(self.ctxt, server['id'])
+            self.assertIsNotNone(inst.numa_topology)
+            placed_nodes.append(inst.numa_topology.cells[0].id)
+
+        # With the fix for bug #2144660, all 3 non-PCI VMs are placed on
+        # NUMA nodes 1, 2, 3 (avoiding node 0 which has PCI devices).
+        for node_id in placed_nodes:
+            self.assertNotEqual(0, node_id)
+
+    def test_pci_vm_lands_on_pci_numa_node_with_pack(self):
+        """A VM that requests a PCI device should land on the PCI NUMA node.
+
+        This is the positive control: when a VM explicitly requests a PCI
+        device, the PCI-aware sort should place it on the NUMA node that
+        holds the PCI devices (node 1 in this setup). PCI devices are
+        placed on node 1 (not node 0) to ensure the test validates active
+        selection rather than relying on a default to node 0.
+
+        This path works correctly because claims.py does pass pci_stats
+        when pci_requests.requests is non-empty.
+        """
+        self._start_compute_with_pci(pci_numa_node=1)
+
+        # Create a VM that DOES request a PCI device
+        extra_spec = {
+            'hw:cpu_policy': 'dedicated',
+            'hw:mem_page_size': '1GB',
+            'pci_passthrough:alias': 'a1:1',
+        }
+        flavor_id = self._create_flavor(extra_spec=extra_spec)
+        server = self._create_server(
+            flavor_id=flavor_id, networks='none')
+
+        inst = objects.Instance.get_by_uuid(self.ctxt, server['id'])
+        self.assertIsNotNone(inst.numa_topology)
+        self.assertEqual(1, len(inst.numa_topology.cells))
+
+        # The VM SHOULD be placed on NUMA node 1 (the PCI node)
+        placed_on_node = inst.numa_topology.cells[0].id
+        self.assertEqual(
+            1, placed_on_node,
+            f"PCI VM was placed on NUMA node {placed_on_node} instead of "
+            f"node 1 which holds the PCI devices."
         )

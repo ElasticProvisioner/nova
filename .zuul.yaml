@@ -52,12 +52,12 @@
     timeout: 3600
 
 - job:
-    name: nova-tox-py312-threading
-    parent: openstack-tox-py312
+    name: nova-tox-py313-threading
+    parent: openstack-tox-py313
     description: |
       Run tox-based unit tests for the OpenStack Nova project
-      under cPython version 3.12 with eventlet disabled.
-      Uses tox with the ``py312-threading`` environment.
+      under cPython version 3.13 with eventlet disabled.
+      Uses tox with the ``py313-threading`` environment.
 
     required-projects:
       # including nova here makes this job reusable by other projects and
@@ -68,8 +68,8 @@
       # explicitly stating the work dir makes this job reusable by other
       # projects
       zuul_work_dir: src/opendev.org/openstack/nova
-      bindep_profile: test py312
-      tox_envlist: py312-threading
+      bindep_profile: test py313
+      tox_envlist: py313-threading
 
 - job:
     name: nova-tox-validate-backport
@@ -161,6 +161,12 @@
         NOVA_ALLOW_MOVE_TO_SAME_HOST: false
         LIVE_MIGRATION_AVAILABLE: true
         USE_BLOCK_MIGRATION_FOR_LIVE_MIGRATION: true
+        'SYSTEMD_ENV_VARS["n-sch"]': OS_NOVA_DISABLE_EVENTLET_PATCHING=true
+        'SYSTEMD_ENV_VARS["n-api"]': OS_NOVA_DISABLE_EVENTLET_PATCHING=true
+        'SYSTEMD_ENV_VARS["n-api-meta"]': OS_NOVA_DISABLE_EVENTLET_PATCHING=true
+        'SYSTEMD_ENV_VARS["n-cond-cell1"]': OS_NOVA_DISABLE_EVENTLET_PATCHING=true
+        'SYSTEMD_ENV_VARS["n-super-cond"]': OS_NOVA_DISABLE_EVENTLET_PATCHING=true
+        'SYSTEMD_ENV_VARS["n-cpu"]': OS_NOVA_DISABLE_EVENTLET_PATCHING=true
     group-vars:
       subnode:
         devstack_services:
@@ -175,6 +181,25 @@
           NOVA_ALLOW_MOVE_TO_SAME_HOST: false
           LIVE_MIGRATION_AVAILABLE: true
           USE_BLOCK_MIGRATION_FOR_LIVE_MIGRATION: true
+          'SYSTEMD_ENV_VARS["n-cpu"]': OS_NOVA_DISABLE_EVENTLET_PATCHING=true
+
+- job:
+    name: nova-graceful-shutdown-eventlet
+    parent: nova-graceful-shutdown
+    description: |
+      Run Nova graceful shutdown tests in eventlet mode.
+    vars:
+      devstack_localrc:
+        'SYSTEMD_ENV_VARS["n-sch"]': OS_NOVA_DISABLE_EVENTLET_PATCHING=false
+        'SYSTEMD_ENV_VARS["n-api"]': OS_NOVA_DISABLE_EVENTLET_PATCHING=false
+        'SYSTEMD_ENV_VARS["n-api-meta"]': OS_NOVA_DISABLE_EVENTLET_PATCHING=false
+        'SYSTEMD_ENV_VARS["n-cond-cell1"]': OS_NOVA_DISABLE_EVENTLET_PATCHING=false
+        'SYSTEMD_ENV_VARS["n-super-cond"]': OS_NOVA_DISABLE_EVENTLET_PATCHING=false
+        'SYSTEMD_ENV_VARS["n-cpu"]': OS_NOVA_DISABLE_EVENTLET_PATCHING=false
+    group-vars:
+      subnode:
+        devstack_localrc:
+          'SYSTEMD_ENV_VARS["n-cpu"]': OS_NOVA_DISABLE_EVENTLET_PATCHING=false
 
 - job:
     name: nova-alt-configurations
@@ -420,6 +445,38 @@
               tb_cache_size: 128
     pre-run:
       - playbooks/nova-emulation/pre.yaml
+
+- job:
+    name: nova-vtpm
+    parent: whitebox-devstack-multinode
+    description: |
+      Run tempest vTPM tests against local qcow2 ephemeral storage and shared
+      LVM/iSCSI cinder volumes.
+    irrelevant-files: *nova-base-irrelevant-files
+    vars:
+      tox_envlist: all
+      tempest_concurrency: 4
+      tempest_test_regex: ^(tempest\.api\.compute\.admin\.test_live_migration\.LiveMigrationWithVTPMTest|whitebox_tempest_plugin\.api\.compute\.test_vtpm)
+      # revert this when bug #1940425 is fixed in neutron
+      tempest_exclude_regex: (test_live_migration_with_trunk)
+      devstack_services:
+        neutron-trunk: true
+        openstack-cli-server: true
+        c-bak: false
+        s-account: false
+        s-container: false
+        s-object: false
+        s-proxy: false
+        barbican: true
+    group-vars:
+      subnode:
+        devstack_services:
+          c-bak: false
+          s-account: false
+          s-container: false
+          s-object: false
+          s-proxy: false
+          barbican: false
 
 # TODO(lucasagomes): Move this job to ML2/OVN when QoS Minimum Bandwidth
 # support is implemented.
@@ -854,7 +911,7 @@
       jobs:
         # We define our own irrelevant-files so we don't run the job
         # on things like nova docs-only changes.
-        - ironic-tempest-bios-ipmi-direct:
+        - ironic-tempest-bios-ipmi-autodetect:
             voting: false
             irrelevant-files: *nova-base-irrelevant-files
         - nova-ceph-multistore:
@@ -867,6 +924,7 @@
               - ^nova/network/.*$
               - nova/virt/libvirt/vif.py
         - nova-live-migration
+        - nova-vtpm
         # NOTE(gmaan): We will be running the graceful shutdown testing in
         # check pipeline only and not required to test in gate as such.
         - nova-graceful-shutdown
@@ -899,10 +957,10 @@
         - barbican-tempest-plugin-simple-crypto:
             irrelevant-files: *nova-base-irrelevant-files
             voting: false
-        - nova-tox-py312-threading
+        - nova-tox-py313-threading
         - openstack-tox-cover:
             # Allow more time for unit and functional tests to run.
-            timeout: 5400
+            timeout: 6000
     gate:
       jobs:
         - nova-live-migration
@@ -930,7 +988,7 @@
             irrelevant-files: *nova-base-irrelevant-files
         - openstacksdk-functional-devstack:
             irrelevant-files: *nova-base-irrelevant-files
-        - nova-tox-py312-threading
+        - nova-tox-py313-threading
         - nova-alt-configurations
     periodic-weekly:
       jobs:
@@ -941,6 +999,7 @@
         - tempest-centos9-stream-fips
         - whitebox-devstack-multinode
         - tempest-integrated-compute-rbac-old-defaults
+        - nova-graceful-shutdown-eventlet
     experimental:
       jobs:
         - ironic-tempest-bfv:
@@ -974,3 +1033,4 @@
         - whitebox-devstack-multinode
         - tempest-integrated-compute-rbac-old-defaults:
             irrelevant-files: *policies-irrelevant-files
+        - nova-graceful-shutdown-eventlet

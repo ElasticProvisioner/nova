@@ -35,8 +35,6 @@ from unittest import mock
 
 from castellan import key_manager
 import ddt
-import eventlet
-from eventlet import greenthread
 import fixtures
 import futurist
 from lxml import etree
@@ -569,7 +567,7 @@ class CacheConcurrencyTestCase(test.NoDBTestCase):
         wait1 = threading.Event()
         done1 = threading.Event()
         sig1 = threading.Event()
-        thr1 = eventlet.spawn(backend.by_name(self._fake_instance(uuid),
+        thr1 = utils.spawn(backend.by_name(self._fake_instance(uuid),
                                               'name').cache,
                 _concurrency, 'fname', None,
                 signal=sig1, wait=wait1, done=done1)
@@ -580,7 +578,7 @@ class CacheConcurrencyTestCase(test.NoDBTestCase):
         wait2 = threading.Event()
         done2 = threading.Event()
         sig2 = threading.Event()
-        thr2 = eventlet.spawn(backend.by_name(self._fake_instance(uuid),
+        thr2 = utils.spawn(backend.by_name(self._fake_instance(uuid),
                                               'name').cache,
                 _concurrency, 'fname', None,
                 signal=sig2, wait=wait2, done=done2)
@@ -592,12 +590,12 @@ class CacheConcurrencyTestCase(test.NoDBTestCase):
         finally:
             wait1.set()
         done1.wait()
-        utils.cooperative_yield()
+        done2.wait()
         self.assertTrue(done2.is_set())
-        # Wait on greenthreads to assert they didn't raise exceptions
+        # Wait on threads to assert they didn't raise exceptions
         # during execution
-        thr1.wait()
-        thr2.wait()
+        thr1.result()
+        thr2.result()
 
     def test_different_fname_concurrency(self):
         # Ensures that two different fname caches are concurrent.
@@ -607,7 +605,7 @@ class CacheConcurrencyTestCase(test.NoDBTestCase):
         wait1 = threading.Event()
         done1 = threading.Event()
         sig1 = threading.Event()
-        thr1 = eventlet.spawn(backend.by_name(self._fake_instance(uuid),
+        thr1 = utils.spawn(backend.by_name(self._fake_instance(uuid),
                                               'name').cache,
                 _concurrency, 'fname2', None,
                 signal=sig1, wait=wait1, done=done1)
@@ -618,7 +616,7 @@ class CacheConcurrencyTestCase(test.NoDBTestCase):
         wait2 = threading.Event()
         done2 = threading.Event()
         sig2 = threading.Event()
-        thr2 = eventlet.spawn(backend.by_name(self._fake_instance(uuid),
+        thr2 = utils.spawn(backend.by_name(self._fake_instance(uuid),
                                               'name').cache,
                 _concurrency, 'fname1', None,
                 signal=sig2, wait=wait2, done=done2)
@@ -629,17 +627,17 @@ class CacheConcurrencyTestCase(test.NoDBTestCase):
         wait2.set()
         tries = 0
         while not done2.is_set() and tries < 10:
-            utils.cooperative_yield()
+            time.sleep(0.1)
             tries += 1
         try:
             self.assertTrue(done2.is_set())
         finally:
             wait1.set()
             utils.cooperative_yield()
-        # Wait on greenthreads to assert they didn't raise exceptions
+        # Wait on hreads to assert they didn't raise exceptions
         # during execution
-        thr1.wait()
-        thr2.wait()
+        thr1.result()
+        thr2.result()
 
 
 class FakeInvalidVolumeDriver(object):
@@ -3941,15 +3939,15 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         self._test_get_mem_encryption_config(enc_image_prop=True)
 
     def test_get_mem_encryption_config_host_support_flavor_requested(self):
-        expected = hardware.MemEncryptionConfig(
-            model=fields.MemEncryptionModel.AMD_SEV)
+        expected = hardware.MemEncryptionConfig.create(
+            fields.MemEncryptionModel.AMD_SEV)
         self._test_get_mem_encryption_config(
             expected, host_sev_enabled=True, enc_extra_spec=True,
             hw_firmware_type='uefi', hw_machine_type='q35')
 
     def test_get_mem_encryption_config_host_support_image_requested(self):
-        expected = hardware.MemEncryptionConfig(
-            model=fields.MemEncryptionModel.AMD_SEV)
+        expected = hardware.MemEncryptionConfig.create(
+            fields.MemEncryptionModel.AMD_SEV)
         self._test_get_mem_encryption_config(
             expected, host_sev_enabled=True, enc_image_prop=True,
             hw_firmware_type='uefi', hw_machine_type='q35')
@@ -4101,6 +4099,19 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         self.assertEqual(sev_policy, cfg.launch_security.policy)
 
         mock_designer.assert_called_once_with(cfg)
+
+    @mock.patch.object(hardware.MemEncryptionConfigSev, 'model',
+                       new_callable=mock.PropertyMock)
+    @mock.patch.object(host.Host, 'get_domain_capabilities')
+    @mock.patch.object(designer, 'set_driver_iommu_for_all_devices')
+    def test_get_guest_config_invalid_mem_enc_model(
+            self, mock_designer, fake_domain_caps, fake_me_model):
+        self._setup_fake_domain_caps(fake_domain_caps)
+        fake_me_model.return_value = 'invalid'
+        self.assertRaisesRegex(exception.Invalid,
+                               'Unknown MemEncryptionModel: invalid',
+                               self._setup_sev_guest,
+                               model='amd-sev')
 
     @mock.patch.object(host.Host, 'get_domain_capabilities')
     def test__get_cpu_emulation_arch_traits(self, fake_domain_caps):
@@ -10729,8 +10740,8 @@ class LibvirtConnTestCase(test.NoDBTestCase,
 
     @mock.patch.object(
         libvirt_driver.LibvirtDriver, '_get_mem_encryption_config',
-        new=mock.Mock(return_value=hardware.MemEncryptionConfig(
-            model=fields.MemEncryptionModel.AMD_SEV)))
+        new=mock.Mock(return_value=hardware.MemEncryptionConfig.create(
+            fields.MemEncryptionModel.AMD_SEV)))
     @mock.patch.object(libvirt_driver.LibvirtDriver, '_set_cache_mode',
                        new=mock.Mock())
     @mock.patch.object(volume_drivers.LibvirtFakeVolumeDriver, 'get_config')
@@ -18603,7 +18614,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         self.assertEqual(2, mock_get.call_count)
 
     @mock.patch.object(loopingcall, 'FixedIntervalLoopingCall')
-    @mock.patch.object(greenthread, 'sleep')
+    @mock.patch.object(time, 'sleep')
     @mock.patch.object(libvirt_driver.LibvirtDriver, '_hard_reboot')
     @mock.patch.object(host.Host, '_get_domain')
     def test_reboot_same_ids(self, mock_get_domain, mock_hard_reboot,
@@ -26752,8 +26763,8 @@ class LibvirtDriverTestCase(test.NoDBTestCase, TraitsComparisonMixin):
             power_state.RUNNING,
             (fakelibvirt.VIR_DOMAIN_AFFECT_CONFIG |
              fakelibvirt.VIR_DOMAIN_AFFECT_LIVE),
-            me_config=hardware.MemEncryptionConfig(
-                model=fields.MemEncryptionModel.AMD_SEV
+            me_config=hardware.MemEncryptionConfig.create(
+                fields.MemEncryptionModel.AMD_SEV
             ))
 
     def test_attach_interface_with_pause_instance(self):
@@ -30756,9 +30767,8 @@ class LibvirtNonblockingTestCase(test.NoDBTestCase):
         drvr.set_host_enabled = mock.Mock()
         jsonutils.to_primitive(drvr._conn, convert_instances=True)
 
-    @mock.patch.object(eventlet.tpool, 'execute')
     @mock.patch.object(objects.Service, 'get_by_compute_host')
-    def test_tpool_execute_calls_libvirt(self, mock_svc, mock_execute):
+    def test_tpool_execute_calls_libvirt(self, mock_svc):
         if utils.concurrency_mode_threading():
             self.skipTest(
                 "In threading mode nova does not use eventlet.tpool to "
@@ -30787,13 +30797,15 @@ class LibvirtNonblockingTestCase(test.NoDBTestCase):
             side_effect.append(None)
             expected_calls.append(mock.call(
                 conn.registerCloseCallback, mock.ANY, mock.ANY))
-        mock_execute.side_effect = side_effect
 
-        driver = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
-        c = driver._get_connection()
-        self.assertTrue(c.is_expected)
-        self.assertEqual(len(expected_calls), mock_execute.call_count)
-        mock_execute.assert_has_calls(expected_calls)
+        with mock.patch('eventlet.tpool.execute') as mock_execute:
+            mock_execute.side_effect = side_effect
+
+            driver = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+            c = driver._get_connection()
+            self.assertTrue(c.is_expected)
+            self.assertEqual(len(expected_calls), mock_execute.call_count)
+            mock_execute.assert_has_calls(expected_calls)
 
 
 class LibvirtVolumeSnapshotTestCase(test.NoDBTestCase):
@@ -32187,7 +32199,7 @@ class TestLibvirtSEVUnsupported(TestLibvirtSEV):
             }
         }, self.driver._get_memory_encryption_inventories())
 
-    @mock.patch.object(libvirt_driver.LOG, 'warning')
+    @mock.patch.object(host.LOG, 'warning')
     def test_get_memory_encryption_inventories_config_non_zero_unsupported(
             self, mock_log):
         self.flags(num_memory_encrypted_guests=16, group='libvirt')
@@ -32298,7 +32310,7 @@ class TestLibvirtSEVSupportedMaxGuests(TestLibvirtSEV):
 
     """Libvirt driver tests for when AMD SEV support is present."""
     @test.patch_open(SEV_KERNEL_PARAM_FILE % 'sev', "1\n")
-    @mock.patch.object(libvirt_driver.LOG, 'warning')
+    @mock.patch.object(host.LOG, 'warning')
     def test_get_memory_encryption_inventories_no_override(self, mock_log):
         self.assertEqual({
             'amd_sev': {
@@ -32317,7 +32329,7 @@ class TestLibvirtSEVSupportedMaxGuests(TestLibvirtSEV):
         mock_log.assert_not_called()
 
     @test.patch_open(SEV_KERNEL_PARAM_FILE % 'sev', "1\n")
-    @mock.patch.object(libvirt_driver.LOG, 'warning')
+    @mock.patch.object(host.LOG, 'warning')
     def test_get_memory_encryption_inventories_override_more(self, mock_log):
         self.flags(num_memory_encrypted_guests=120, group='libvirt')
         self.assertEqual({
@@ -32339,7 +32351,7 @@ class TestLibvirtSEVSupportedMaxGuests(TestLibvirtSEV):
             'set to %d, but supports only %d.', 120, 100)
 
     @test.patch_open(SEV_KERNEL_PARAM_FILE % 'sev', "1\n")
-    @mock.patch.object(libvirt_driver.LOG, 'warning')
+    @mock.patch.object(host.LOG, 'warning')
     def test_get_memory_encryption_inventories_override_less(self, mock_log):
         self.flags(num_memory_encrypted_guests=80, group='libvirt')
         self.assertEqual({

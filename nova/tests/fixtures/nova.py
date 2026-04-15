@@ -2143,9 +2143,17 @@ class UnifiedLimitsFixture(fixtures.Fixture):
             self.create_registered_limit)
         self.mock_sdk_adapter.create_limit.side_effect = self.create_limit
 
-        # These are calls made for service endpoint discovery in limit/utils.py
-        self.mock_sdk_adapter.services.return_value = [mock.Mock(id=None)]
-        self.mock_sdk_adapter.regions.return_value = [mock.Mock(id=None)]
+        # These are calls made for service endpoint discovery in
+        # nova/limit/utils.py and they should return generators the same way
+        # openstacksdk does.
+        def fake_services(*a, **kw):
+            return iter([mock.Mock(id=None)])
+
+        def fake_regions(*a, **kw):
+            return iter([mock.Mock(id=None)])
+
+        self.mock_sdk_adapter.services.side_effect = fake_services
+        self.mock_sdk_adapter.regions.side_effect = fake_regions
 
         self.registered_limits_list = []
         self.limits_list = []
@@ -2264,3 +2272,18 @@ class DelayingExecutorWrapperCleanupFixture(fixtures.Fixture):
                 'the wrapper before the end of the test case e.g. by using '
                 'self.addCleanup(...). The test instantiated the wrapper at '
                 'the following place:\n%s' % stack)
+
+
+class NoSleepRetryDecoratorFixture(fixtures.Fixture):
+    def setUp(self):
+        super().setUp()
+        if utils.concurrency_mode_threading():
+            self.useFixture(
+                fixtures.MockPatch(
+                    "oslo_service.backend._threading.loopingcall."
+                    "LoopingCallBase._sleep"))
+        else:
+            self.useFixture(
+                fixtures.MockPatch(
+                    "oslo_service.backend._eventlet.loopingcall."
+                    "LoopingCallBase._sleep"))
