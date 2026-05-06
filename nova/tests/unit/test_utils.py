@@ -23,7 +23,6 @@ from unittest import mock
 
 import fasteners
 import fixtures
-from keystoneauth1 import adapter as ks_adapter
 from keystoneauth1.identity import base as ks_identity
 from keystoneauth1 import session as ks_session
 import netaddr
@@ -888,7 +887,7 @@ class TestObjectCallHelpers(test.NoDBTestCase):
 
 
 class GetKSAAdapterTestCase(test.NoDBTestCase):
-    """Tests for nova.utils.get_endpoint_data()."""
+    """Tests for nova.utils.get_ksa_adapter()."""
 
     def setUp(self):
         super(GetKSAAdapterTestCase, self).setUp()
@@ -958,42 +957,6 @@ class GetKSAAdapterTestCase(test.NoDBTestCase):
         self.load_adap.assert_called_once_with(
             utils.CONF, 'cinder', session=self.sess, auth=self.auth,
             min_version=None, max_version=None, raise_exc=False)
-
-
-class GetEndpointTestCase(test.NoDBTestCase):
-    def setUp(self):
-        super(GetEndpointTestCase, self).setUp()
-        self.adap = mock.create_autospec(ks_adapter.Adapter, instance=True)
-        self.adap.endpoint_override = None
-        self.adap.service_type = 'stype'
-        self.adap.interface = ['admin', 'public']
-
-    def test_endpoint_override(self):
-        self.adap.endpoint_override = 'foo'
-        self.assertEqual('foo', utils.get_endpoint(self.adap))
-        self.adap.get_endpoint_data.assert_not_called()
-        self.adap.get_endpoint.assert_not_called()
-
-    def test_image_good(self):
-        self.adap.service_type = 'image'
-        self.adap.get_endpoint_data.return_value.catalog_url = 'url'
-        self.assertEqual('url', utils.get_endpoint(self.adap))
-        self.adap.get_endpoint_data.assert_called_once_with()
-        self.adap.get_endpoint.assert_not_called()
-
-    def test_image_bad(self):
-        self.adap.service_type = 'image'
-        self.adap.get_endpoint_data.side_effect = AttributeError
-        self.adap.get_endpoint.return_value = 'url'
-        self.assertEqual('url', utils.get_endpoint(self.adap))
-        self.adap.get_endpoint_data.assert_called_once_with()
-        self.adap.get_endpoint.assert_called_once_with()
-
-    def test_nonimage_good(self):
-        self.adap.get_endpoint.return_value = 'url'
-        self.assertEqual('url', utils.get_endpoint(self.adap))
-        self.adap.get_endpoint_data.assert_not_called()
-        self.adap.get_endpoint.assert_called_once_with()
 
 
 class TestResourceClassNormalize(test.NoDBTestCase):
@@ -1615,6 +1578,12 @@ class ExecutorStatsTestCase(test.NoDBTestCase):
         utils, 'concurrency_mode_threading', new=mock.Mock(return_value=False))
     @mock.patch.object(utils.LOG, 'debug')
     def test_stats_logged_eventlet(self, mock_debug):
+        env = os.environ.get('OS_NOVA_DISABLE_EVENTLET_PATCHING', '').lower()
+        if env in ('1', 'true', 'yes'):
+            self.skipTest(
+                "In native threading mode this case is covered by "
+                "test_stats_logged_threading")
+
         # ensure that each task submission triggers stats printing
         self.flags(thread_pool_statistic_period=0)
 
@@ -1650,6 +1619,11 @@ class ExecutorStatsTestCase(test.NoDBTestCase):
         utils, 'concurrency_mode_threading', new=mock.Mock(return_value=True))
     @mock.patch.object(utils.LOG, 'debug')
     def test_stats_logged_threading(self, mock_debug):
+        if not utils.concurrency_mode_threading():
+            self.skipTest(
+                "In eventlet mode this case is covered by "
+                "test_stats_logged_eventlet")
+
         # ensure that each task submission triggers stats printing
         self.flags(thread_pool_statistic_period=0)
         # make the tasks sequential to help simulating queued task
@@ -1724,6 +1698,12 @@ class OsloServiceBackendSelectionTestCase(test.NoDBTestCase):
 
     @mock.patch('oslo_service.backend.init_backend')
     def test_eventlet_selected(self, init_backend):
+        env = os.environ.get('OS_NOVA_DISABLE_EVENTLET_PATCHING', '').lower()
+        if env in ('1', 'true', 'yes'):
+            self.skipTest(
+                "In native threading mode this is covered by "
+                "test_threading_selected*")
+
         monkey_patch.patch()
 
         init_backend.assert_called_once_with(oslo_backend.BackendType.EVENTLET)

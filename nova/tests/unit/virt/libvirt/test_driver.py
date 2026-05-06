@@ -22335,6 +22335,41 @@ class LibvirtConnTestCase(test.NoDBTestCase,
                 cleanup_instance_disks=mock.sentinel.cleanup_instance_disks)
         the_test()
 
+    def test_create_guest_with_network__fatal_timeout_cleans_vtpm_secret(self):
+        drvr = libvirt_driver.LibvirtDriver(mock.MagicMock(), False)
+
+        @mock.patch.object(drvr, 'plug_vifs')
+        @mock.patch.object(drvr, '_create_guest')
+        @mock.patch.object(drvr, '_cleanup')
+        @mock.patch.object(drvr._host, 'delete_secret')
+        def _test(mock_delete_secret, mock_cleanup, mock_create, mock_plug):
+            instance = objects.Instance(**self.test_instance)
+            mock_create.side_effect = exception.VirtualInterfaceCreateException
+            self.assertRaises(
+                exception.VirtualInterfaceCreateException,
+                drvr._create_guest_with_network,
+                self.context, 'xml', instance, [], None)
+            mock_delete_secret.assert_called_once_with(
+                'vtpm', instance.uuid)
+        _test()
+
+    def test_create_guest_with_network__other_error_cleans_vtpm_secret(self):
+        drvr = libvirt_driver.LibvirtDriver(mock.MagicMock(), False)
+
+        @mock.patch.object(drvr, 'plug_vifs')
+        @mock.patch.object(drvr, '_create_guest')
+        @mock.patch.object(drvr, '_cleanup')
+        @mock.patch.object(drvr._host, 'delete_secret')
+        def _test(mock_delete_secret, mock_cleanup, mock_create, mock_plug):
+            instance = objects.Instance(**self.test_instance)
+            mock_create.side_effect = test.TestingException
+            self.assertRaises(
+                test.TestingException, drvr._create_guest_with_network,
+                self.context, 'xml', instance, [], None)
+            mock_delete_secret.assert_called_once_with(
+                'vtpm', instance.uuid)
+        _test()
+
     @mock.patch('os_brick.encryptors.get_encryption_metadata')
     @mock.patch('nova.virt.libvirt.blockinfo.get_info_from_bdm')
     def test_create_guest_with_network__with_bdm(
@@ -30700,6 +30735,16 @@ class LibvirtDriverTestCase(test.NoDBTestCase, TraitsComparisonMixin):
         # unconditionally. Until we become smarter about it, just don't enable
         # it at all. See bug 2009280.
         self.assertFalse(hv.evmcs)
+
+    def test_get_pci_passthrough_devices_lru_cache_called_once(self):
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+        with mock.patch.object(drvr._host, 'list_all_devices',
+                               return_value=[]) as mock_list:
+            # Call _get_pci_passthrough_devices and
+            # check if the result got cached
+            drvr._get_pci_passthrough_devices()
+            drvr._get_pci_passthrough_devices()
+            assert mock_list.call_count == 1
 
 
 class LibvirtVolumeUsageTestCase(test.NoDBTestCase):

@@ -142,8 +142,6 @@ try:
 except ImportError:
     libvirt = None
 
-uefi_logged = False
-
 LOG = logging.getLogger(__name__)
 CONF = nova.conf.CONF
 
@@ -7206,13 +7204,6 @@ class LibvirtDriver(driver.ComputeDriver):
                     hw_firmware_type = fields.FirmwareType.UEFI
 
             if hw_firmware_type == fields.FirmwareType.UEFI:
-                global uefi_logged
-                if not uefi_logged:
-                    LOG.warning("uefi support is without some kind of "
-                                "functional testing and therefore "
-                                "considered experimental.")
-                    uefi_logged = True
-
                 if not self._host.supports_uefi:
                     raise exception.UEFINotSupported()
 
@@ -8452,6 +8443,7 @@ class LibvirtDriver(driver.ComputeDriver):
                     destroy_vifs=True,
                     cleanup_instance_dir=cleanup_instance_dir,
                     cleanup_instance_disks=cleanup_instance_disks)
+                self._host.delete_secret('vtpm', instance.uuid)
                 raise exception.VirtualInterfaceCreateException()
         except Exception:
             # Any other error, be sure to clean up
@@ -8462,6 +8454,7 @@ class LibvirtDriver(driver.ComputeDriver):
                     destroy_vifs=True,
                     cleanup_instance_dir=cleanup_instance_dir,
                     cleanup_instance_disks=cleanup_instance_disks)
+                self._host.delete_secret('vtpm', instance.uuid)
 
         # Resume only if domain has been paused
         if pause:
@@ -8897,6 +8890,7 @@ class LibvirtDriver(driver.ComputeDriver):
         return cpu_info
 
     # TODO(stephenfin): Move this to 'host.py'
+    @functools.cache
     def _get_pci_passthrough_devices(self):
         """Get host PCI devices information.
 
@@ -8934,15 +8928,19 @@ class LibvirtDriver(driver.ComputeDriver):
             except libvirt.libvirtError:
                 return []
 
-        net_devs = [
-            dev for dev in devices.values() if "net" in _safe_list_caps(dev)
-        ]
-        vdpa_devs = [
-            dev for dev in devices.values() if "vdpa" in _safe_list_caps(dev)
-        ]
-        pci_devs = {
-            name: dev for name, dev in devices.items()
-                    if "pci" in _safe_list_caps(dev)}
+        net_devs = []
+        vdpa_devs = []
+        pci_devs = {}
+
+        for dev in devices.values():
+            dev_caps = _safe_list_caps(dev)
+            if "net" in dev_caps:
+                net_devs.append(dev)
+            if "vdpa" in dev_caps:
+                vdpa_devs.append(dev)
+            if "pci" in dev_caps:
+                pci_devs[dev.name] = dev
+
         pci_info = [
             self._host._get_pcidev_info(
                 name, dev, net_devs,
