@@ -630,6 +630,17 @@ class IronicDriver(virt_driver.ComputeDriver):
         else:
             return list(node_generator)
 
+    def get_num_instances(self):
+        """Return the total number of instances.
+
+        Overrides the virt driver implementation for a
+        more efficient lookup
+
+        :returns: a count of instances
+
+        """
+        return len(self.list_instance_uuids())
+
     def list_instances(self):
         """Return the names of all the instances provisioned.
 
@@ -637,14 +648,7 @@ class IronicDriver(virt_driver.ComputeDriver):
         :raises: VirtDriverNotReady
 
         """
-        # NOTE(JayF): As of this writing, November 2023, this is only called
-        #             one place; in compute/manager.py, and only if
-        #             list_instance_uuids is not implemented. This means that
-        #             this is effectively dead code in the Ironic driver.
         if not self.node_cache:
-            # Empty cache, try to populate it. If we cannot populate it, this
-            # is OK. This information is only used to cleanup deleted nodes;
-            # if Ironic has no deleted nodes; we're good.
             self._refresh_cache()
 
         context = nova_context.get_admin_context()
@@ -661,9 +665,6 @@ class IronicDriver(virt_driver.ComputeDriver):
 
         """
         if not self.node_cache:
-            # Empty cache, try to populate it. If we cannot populate it, this
-            # is OK. This information is only used to cleanup deleted nodes;
-            # if Ironic has no deleted nodes; we're good.
             self._refresh_cache()
 
         return [node.instance_id

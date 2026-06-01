@@ -2145,7 +2145,8 @@ class _ComputeAPIUnitTestMixIn(object):
                 self.context, host_name, True)
 
         if flavor_id_passed:
-            mock_get_flavor.assert_called_once_with('new-flavor-id',
+            mock_get_flavor.assert_called_once_with(self.context,
+                                                    'new-flavor-id',
                                                     read_deleted='no')
 
         if not (flavor_id_passed and same_flavor):
@@ -2354,7 +2355,9 @@ class _ComputeAPIUnitTestMixIn(object):
         self.assertRaises(exception.FlavorNotFound,
                           self.compute_api.resize, self.context,
                           fake_inst, flavor_id='flavor-id')
-        mock_get_flavor.assert_called_once_with('flavor-id', read_deleted='no')
+        mock_get_flavor.assert_called_once_with(self.context,
+                                                'flavor-id',
+                                                read_deleted='no')
         # Should never reach these.
         mock_count.assert_not_called()
         mock_limit.assert_not_called()
@@ -2387,7 +2390,8 @@ class _ComputeAPIUnitTestMixIn(object):
         self.assertRaises(exception.FlavorMemoryTooSmall,
                           self.compute_api.resize, self.context,
                           fake_inst, flavor_id=new_flavor.id)
-        mock_get_flavor.assert_called_once_with(200, read_deleted='no')
+        mock_get_flavor.assert_called_once_with(self.context, 200,
+                                                read_deleted='no')
         # Should never reach these.
         mock_count.assert_not_called()
         mock_limit.assert_not_called()
@@ -2415,7 +2419,9 @@ class _ComputeAPIUnitTestMixIn(object):
         self.assertRaises(exception.FlavorNotFound,
                           self.compute_api.resize, self.context,
                           fake_inst, flavor_id='flavor-id')
-        mock_get_flavor.assert_called_once_with('flavor-id', read_deleted='no')
+        mock_get_flavor.assert_called_once_with(self.context,
+                                                'flavor-id',
+                                                read_deleted='no')
         # Should never reach these.
         mock_count.assert_not_called()
         mock_limit.assert_not_called()
@@ -2514,7 +2520,9 @@ class _ComputeAPIUnitTestMixIn(object):
                           fake_inst, flavor_id='flavor-id')
 
         mock_save.assert_not_called()
-        mock_get_flavor.assert_called_once_with('flavor-id', read_deleted='no')
+        mock_get_flavor.assert_called_once_with(self.context,
+                                                'flavor-id',
+                                                read_deleted='no')
         mock_upsize.assert_called_once_with(test.MatchType(objects.Flavor),
                                             test.MatchType(objects.Flavor))
         # mock.ANY might be 'instances', 'cores', or 'ram'
@@ -2589,7 +2597,8 @@ class _ComputeAPIUnitTestMixIn(object):
             self.assertEqual('2, 1024', e.kwargs['req'])
             self.assertEqual('1, 512', e.kwargs['used'])
             self.assertEqual('1, 512', e.kwargs['allowed'])
-            mock_get_flavor.assert_called_once_with('fake_flavor_id',
+            mock_get_flavor.assert_called_once_with(self.context,
+                                                    'fake_flavor_id',
                                                     read_deleted="no")
         else:
             self.fail("Exception not raised")
@@ -2615,7 +2624,8 @@ class _ComputeAPIUnitTestMixIn(object):
                           self.context, self._create_instance_obj(),
                           'fake_flavor_id')
 
-        mock_get_flavor.assert_called_once_with('fake_flavor_id',
+        mock_get_flavor.assert_called_once_with(self.context,
+                                                'fake_flavor_id',
                                                 read_deleted="no")
         mock_enforce.assert_called_once_with(
             self.context, "fake", mock_get_flavor.return_value, False, 1, 1)

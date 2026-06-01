@@ -3004,10 +3004,9 @@ class TestAPI(TestAPIBase):
         self.assertIsNone(iid)
 
     def test_nw_info_build_network_bridge(self):
-        net, iid = self._test_nw_info_build_network(model.VIF_TYPE_BRIDGE)
-        self.assertEqual('brqnet-id', net['bridge'])
-        self.assertTrue(net['should_create_bridge'])
-        self.assertIsNone(iid)
+        self.assertRaises(exception.NovaException,
+                          self._test_nw_info_build_network,
+                          model.VIF_TYPE_BRIDGE)
 
     def test_nw_info_build_network_tap(self):
         net, iid = self._test_nw_info_build_network(model.VIF_TYPE_TAP)
@@ -3145,7 +3144,9 @@ class TestAPI(TestAPIBase):
                 extra_details={model.VIF_DETAILS_VHOSTUSER_OVS_PLUG: True})
 
     def test_nw_info_build_custom_lb_bridge(self):
-        self._test_nw_info_build_custom_bridge(model.VIF_TYPE_BRIDGE)
+        self.assertRaises(exception.NovaException,
+                          self._test_nw_info_build_custom_bridge,
+                          model.VIF_TYPE_BRIDGE)
 
     @mock.patch.object(neutronapi.API, '_get_physnet_tunneled_info',
                        return_value=(None, False))
@@ -3174,7 +3175,7 @@ class TestAPI(TestAPIBase):
              'status': 'ACTIVE',
              'fixed_ips': [{'ip_address': '1.1.1.1'}],
              'mac_address': 'de:ad:be:ef:00:01',
-             'binding:vif_type': model.VIF_TYPE_BRIDGE,
+             'binding:vif_type': model.VIF_TYPE_OVS,
              'binding:vnic_type': model.VNIC_TYPE_NORMAL,
              'binding:vif_details': {},
              },
@@ -3185,7 +3186,7 @@ class TestAPI(TestAPIBase):
              'status': 'DOWN',
              'fixed_ips': [{'ip_address': '1.1.1.1'}],
              'mac_address': 'de:ad:be:ef:00:02',
-             'binding:vif_type': model.VIF_TYPE_BRIDGE,
+             'binding:vif_type': model.VIF_TYPE_OVS,
              'binding:vnic_type': model.VNIC_TYPE_NORMAL,
              'binding:vif_details': {},
              },
@@ -3196,7 +3197,7 @@ class TestAPI(TestAPIBase):
              'status': 'DOWN',
              'fixed_ips': [{'ip_address': '1.1.1.1'}],
              'mac_address': 'de:ad:be:ef:00:03',
-             'binding:vif_type': model.VIF_TYPE_BRIDGE,
+             'binding:vif_type': model.VIF_TYPE_OVS,
              'binding:vnic_type': model.VNIC_TYPE_NORMAL,
              'binding:vif_details': {},
              },
@@ -3236,7 +3237,7 @@ class TestAPI(TestAPIBase):
              'status': 'ACTIVE',
              'fixed_ips': [{'ip_address': '1.1.1.1'}],
              'mac_address': 'de:ad:be:ef:00:06',
-             'binding:vif_type': model.VIF_TYPE_BRIDGE,
+             'binding:vif_type': model.VIF_TYPE_OVS,
              # No binding:vnic_type
              'binding:vif_details': {},
              },
@@ -3290,11 +3291,15 @@ class TestAPI(TestAPIBase):
             self.assertEqual(requested_ports[index]['mac_address'],
                              nw_info['address'])
             self.assertEqual('tapport' + str(index), nw_info['devname'])
-            self.assertIsNone(nw_info['ovs_interfaceid'])
+            # For OVS VIF types, ovs_interfaceid should be set to the port ID
+            if (requested_ports[index]['binding:vif_type'] ==
+                    model.VIF_TYPE_OVS):
+                self.assertEqual(requested_ports[index]['id'],
+                                 nw_info['ovs_interfaceid'])
+            else:
+                self.assertIsNone(nw_info['ovs_interfaceid'])
             self.assertEqual(requested_ports[index]['binding:vif_type'],
                              nw_info['type'])
-            if nw_info['type'] == model.VIF_TYPE_BRIDGE:
-                self.assertEqual('brqnet-id', nw_info['network']['bridge'])
             self.assertEqual(requested_ports[index].get('binding:vnic_type',
                                 model.VNIC_TYPE_NORMAL), nw_info['vnic_type'])
             self.assertEqual(requested_ports[index].get('binding:vif_details'),
@@ -3374,7 +3379,7 @@ class TestAPI(TestAPIBase):
              'status': 'ACTIVE',
              'fixed_ips': [{'ip_address': '1.1.1.1'}],
              'mac_address': 'de:ad:be:ef:00:01',
-             'binding:vif_type': model.VIF_TYPE_BRIDGE,
+             'binding:vif_type': model.VIF_TYPE_OVS,
              'binding:vnic_type': model.VNIC_TYPE_NORMAL,
              'binding:vif_details': {},
              },
@@ -3431,7 +3436,7 @@ class TestAPI(TestAPIBase):
                 "status": "ACTIVE",
                 "fixed_ips": [{"ip_address": "1.1.1.1"}],
                 "mac_address": "de:ad:be:ef:00:01",
-                "binding:vif_type": model.VIF_TYPE_BRIDGE,
+                "binding:vif_type": model.VIF_TYPE_OVS,
                 "binding:vnic_type": model.VNIC_TYPE_DIRECT,
                 "binding:vif_details": {},
             },
@@ -3500,7 +3505,7 @@ class TestAPI(TestAPIBase):
                 "status": "ACTIVE",
                 "fixed_ips": [{"ip_address": "1.1.1.1"}],
                 "mac_address": "de:ad:be:ef:00:01",
-                "binding:vif_type": model.VIF_TYPE_BRIDGE,
+                "binding:vif_type": model.VIF_TYPE_OVS,
                 "binding:vnic_type": model.VNIC_TYPE_DIRECT,
                 "binding:vif_details": {},
             },
@@ -6397,6 +6402,52 @@ class TestAPI(TestAPIBase):
         # we delete the created port
         mock_delete_ports.assert_called_once_with(
             ntrn, instance, [uuids.created_port_id])
+
+    @mock.patch('nova.network.neutron.API.has_dns_extension',
+                new=mock.Mock(return_value=False))
+    @mock.patch('nova.network.neutron.API._populate_neutron_extension_values')
+    @mock.patch('nova.network.neutron.API._update_port',
+                # fails on the 1st call and triggers the cleanup
+                side_effect=exception.PortInUse(
+                    port_id=uuids.created_port_id))
+    @mock.patch('nova.network.neutron.API._unbind_ports')
+    @mock.patch('nova.network.neutron.API._delete_ports')
+    def test_update_ports_for_instance_fails_delete_all_created_ports(self,
+            mock_delete_ports,
+            mock_unbind_ports,
+            mock_update_port,
+            mock_populate_ext_values):
+        """Makes sure we delete created ports if we fail updating ports"""
+        ctxt = context.get_admin_context()
+        instance = fake_instance.fake_instance_obj(ctxt)
+        ntrn = mock.Mock(spec=client.Client)
+        # we have two requests, all ports where nova
+        # created the port (on the same network)
+        requests_and_created_ports = [
+            (objects.NetworkRequest(network_id=uuids.network_id,
+                                    port_id=uuids.created_port_id),
+             uuids.created_port_id),
+            (objects.NetworkRequest(network_id=uuids.network_id,
+                                    port_id=uuids.created_port_id2),
+             uuids.created_port_id2),
+        ]
+        network = {'id': uuids.network_id}
+        nets = {uuids.network_id: network}
+        self.assertRaises(exception.PortInUse,
+                          neutronapi.API()._update_ports_for_instance,
+                          ctxt, instance, ntrn, ntrn,
+                          requests_and_created_ports, nets, bind_host_id=None,
+                          requested_ports_dict=None,
+                          network_arqs=None)
+        # assert the calls
+        mock_update_port.assert_has_calls([
+            mock.call(ntrn, instance, uuids.created_port_id, mock.ANY)
+        ])
+        mock_unbind_ports.assert_called_once_with(
+            ctxt, [], ntrn, ntrn)
+        # should delete all ports
+        mock_delete_ports.assert_called_once_with(
+            ntrn, instance, [uuids.created_port_id, uuids.created_port_id2])
 
     @mock.patch('nova.network.neutron.API._get_floating_ip_by_address',
                 return_value={"port_id": "1"})
@@ -9432,6 +9483,101 @@ class TestNeutronPortSecurity(test.NoDBTestCase):
             [mock.call(fields=['id', 'name'], tenant_id=uuids.project_id),
              mock.call(fields=['id', 'name'], shared=True)])
 
+    def test__process_security_groups_unique_uuids(self):
+        instance = objects.Instance(project_id=uuids.project_id)
+        mock_neutron = mock.Mock(spec=client.Client)
+        mock_neutron.list_security_groups.side_effect = [
+            {
+                'security_groups': [
+                    {
+                        'id': uuids.sg1,
+                        'name': 'nonunique-name',
+                    }
+                ]
+            },
+            {
+                'security_groups': [
+                    {
+                        'id': uuids.sg2,
+                        'name': 'nonunique-name',
+                    }
+                ]
+            }
+        ]
+        mock_neutron.list_extensions.return_value = {
+            'extensions': [{'alias': constants.SG_SHARED_FILTER}]}
+        api = neutronapi.API()
+
+        # Bug 2105896: it is ok for security groups to have the same
+        # name if we request them by uuid.
+        result = api._process_security_groups(
+            instance, mock_neutron, [uuids.sg1, uuids.sg2])
+
+        self.assertEqual([uuids.sg1, uuids.sg2], result)
+        mock_neutron.list_security_groups.assert_has_calls(
+            [mock.call(fields=['id', 'name'], tenant_id=uuids.project_id),
+             mock.call(fields=['id', 'name'], shared=True)])
+
+    def test__process_security_groups_non_unique_match_same_tenant(self):
+        """Test that duplicate names within the same tenant are handled.
+
+        When two SGs in the same tenant have the same name, requesting
+        by name should raise NoUniqueMatch, but requesting by UUID
+        should succeed.
+        """
+        instance = objects.Instance(project_id=uuids.project_id)
+        mock_neutron = mock.Mock(spec=client.Client)
+        mock_neutron.list_security_groups.return_value = {
+            'security_groups': [
+                {
+                    'id': uuids.sg1,
+                    'name': 'nonunique-name',
+                },
+                {
+                    'id': uuids.sg2,
+                    'name': 'nonunique-name',
+                }
+            ]
+        }
+        mock_neutron.list_extensions.return_value = {
+            'extensions': [{'alias': constants.SG_SHARED_FILTER}]}
+        api = neutronapi.API()
+
+        # Requesting by name should raise NoUniqueMatch
+        ex = self.assertRaises(
+            exception.NoUniqueMatch, api._process_security_groups,
+            instance, mock_neutron, ["nonunique-name"])
+        self.assertIn("nonunique-name", str(ex))
+
+    def test__process_security_groups_unique_uuids_same_tenant(self):
+        """Test that duplicate names within the same tenant are accepted
+        when requested by UUID (bug 2105896).
+        """
+        instance = objects.Instance(project_id=uuids.project_id)
+        mock_neutron = mock.Mock(spec=client.Client)
+        mock_neutron.list_security_groups.return_value = {
+            'security_groups': [
+                {
+                    'id': uuids.sg1,
+                    'name': 'nonunique-name',
+                },
+                {
+                    'id': uuids.sg2,
+                    'name': 'nonunique-name',
+                }
+            ]
+        }
+        mock_neutron.list_extensions.return_value = {
+            'extensions': [{'alias': constants.SG_SHARED_FILTER}]}
+        api = neutronapi.API()
+
+        result = api._process_security_groups(
+            instance, mock_neutron, [uuids.sg1, uuids.sg2])
+        self.assertEqual([uuids.sg1, uuids.sg2], result)
+        # Only one call since both SGs are in the tenant list
+        mock_neutron.list_security_groups.assert_called_once_with(
+            fields=['id', 'name'], tenant_id=uuids.project_id)
+
     @mock.patch.object(neutronapi.API, 'get_instance_nw_info')
     @mock.patch.object(neutronapi.API, '_update_port_dns_name')
     @mock.patch.object(neutronapi.API, '_create_port_minimal')
@@ -9962,10 +10108,10 @@ class TestGetInstanceNetworkInfo(test.NoDBTestCase):
         self.assertIsNotNone(new_vif)
         self.assertFalse(new_vif['active'])
 
-    def test_get_nw_info_refresh_vif_id_remove_vif(self):
+    def test_get_nw_info_refresh_vif_id_preserves_missing_vif(self):
         """Tests that a network-changed event occurred on a single port
-        which is already in the cache but not in the current list of ports
-        for the instance, so it's removed from the cache.
+        which is already in the cache but not in the current list of ports for
+        the instance, so it is kept for detach or delete cleanup.
         """
         # The cache has two existing VIFs.
         self.instance.info_cache = self._get_fake_info_cache(
@@ -9979,11 +10125,13 @@ class TestGetInstanceNetworkInfo(test.NoDBTestCase):
                 new_callable=mock.NonCallableMock):
             nwinfo = self.api._get_instance_nw_info(
                 self.context, self.instance, refresh_vif_id=uuids.removed_port)
-        # Assert that only the old port is still in the cache.
+        # Assert that both ports are still in the cache. The removed port is
+        # preserved so compute can still unplug it if a network-vif-deleted
+        # event arrives or the instance is deleted.
         old_vif = self._get_vif_in_cache(nwinfo, uuids.old_port)
         self.assertIsNotNone(old_vif)
         removed_vif = self._get_vif_in_cache(nwinfo, uuids.removed_port)
-        self.assertIsNone(removed_vif)
+        self.assertIsNotNone(removed_vif)
 
     def test_get_instance_nw_info_force_refresh(self):
         """Tests a full refresh of the instance info cache using information

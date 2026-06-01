@@ -1149,7 +1149,7 @@ class Domain(object):
         self._has_saved_state = False
         self._snapshots = {}
         self._id = self._connection._id_counter
-        self._job_type = VIR_DOMAIN_JOB_UNBOUNDED
+        self._job_type = VIR_DOMAIN_JOB_NONE
 
     def _parse_definition(self, xml):
         try:
@@ -1916,8 +1916,7 @@ class Domain(object):
         return [0] * 12
 
     def jobStats(self, flags=0):
-        # NOTE(artom) By returning VIR_DOMAIN_JOB_UNBOUNDED, we're pretending a
-        # job is constantly running. Tests are expected to call the
+        # Tests are expected to call the
         # complete_job or fail_job methods when they're ready for jobs (read:
         # live migrations) to "complete".
         return {'type': self._job_type}
@@ -2720,6 +2719,11 @@ class LibvirtFixture(fixtures.Fixture):
             fixtures.MockPatch('os.uname', return_value=fake_uname)).mock
         self.useFixture(fixtures.MonkeyPatch(
             'nova.virt.libvirt.driver.sys.platform', 'linux'))
+
+        # mock /proc/meminfo access
+        self.useFixture(fixtures.MockPatch(
+            'nova.virt.libvirt.host.Host._get_avail_memory_kb',
+            return_value=10 * 1024 * 1024))  # 10 GB
 
         real_exists = os.path.exists
 

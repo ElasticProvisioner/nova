@@ -24,6 +24,8 @@ import inspect
 import time
 import typing as ty
 
+from collections import defaultdict
+
 from neutronclient.common import exceptions as neutron_client_exc
 from neutronclient.v2_0 import client as clientv20
 from oslo_concurrency import lockutils
@@ -810,12 +812,12 @@ class API:
         :raises nova.exception.SecurityGroupNotFound: If a given security group
             is not found.
         """
-        # Initialize two dictionaries to map security group names and IDs to
-        # their corresponding IDs
-        name_to_id = {}
+        # Map security group names to their IDs (a name can have
+        # multiple IDs since Neutron does not enforce uniqueness)
+        name_to_id = defaultdict(list)
         # NOTE(sean-k-mooney): using a dict here instead of a set is faster
         # probably due to l1 code cache misses due to the introduction
-        # of set lookup in addition to dict lookups making the branch
+        # of set lookups in addition to dict lookups making the branch
         # prediction for the second for loop less reliable.
         id_to_id = {}
 
@@ -823,14 +825,8 @@ class API:
         for user_security_group in user_security_groups:
             name = user_security_group['name']
             sg_id = user_security_group['id']
-
-            # Check for duplicate names and raise an exception if found
-            if name in name_to_id:
-                raise exception.NoUniqueMatch(
-                    _("Multiple security groups found matching"
-                      " '%s'. Use an ID to be more specific.") % name)
-            # Map the name to its corresponding ID
-            name_to_id[name] = sg_id
+            # Append the ID to the list for this name
+            name_to_id[name].append(sg_id)
             # Map the ID to itself for easy lookup
             id_to_id[sg_id] = sg_id
 
@@ -839,16 +835,19 @@ class API:
 
         # Iterate over the requested security groups
         for security_group in security_groups:
-            # Check if the security group is in the name-to-ID dictionary
-            # as if a user names the security group the same as
-            # another's security groups uuid, the name takes priority.
-            if security_group in name_to_id:
-                security_group_ids.append(name_to_id[security_group])
-            # Check if the security group is in the ID-to-ID dictionary
-            elif security_group in id_to_id:
+            # Check UUID first since it is always unique
+            if security_group in id_to_id:
                 security_group_ids.append(id_to_id[security_group])
-            # Raise an exception if the security group is not found in
-            # either dictionary
+            # Then check by name
+            elif security_group in name_to_id:
+                # If there are multiple IDs for this name, raise exception
+                if len(name_to_id[security_group]) > 1:
+                    raise exception.NoUniqueMatch(
+                        _("Multiple security groups found matching"
+                          " '%s'. Use an ID to be more specific.")
+                        % security_group)
+                security_group_ids.append(name_to_id[security_group][0])
+            # Raise an exception if the security group is not found
             else:
                 raise exception.SecurityGroupNotFound(
                     security_group_id=security_group)
@@ -1319,7 +1318,9 @@ class API:
         port_client = admin_client
 
         preexisting_port_ids = []
-        created_port_ids = []
+        created_port_ids = [
+            port_id for _, port_id in requests_and_created_ports
+            if port_id is not None]
         ports_in_requested_order = []
         nets_in_requested_order = []
         created_vifs = []   # this list is for cleanups if we fail
@@ -1362,7 +1363,6 @@ class API:
 
                 if created_port_id:
                     port_id = created_port_id
-                    created_port_ids.append(port_id)
                 else:
                     port_id = request.port_id
                 ports_in_requested_order.append(port_id)
@@ -3310,9 +3310,11 @@ class API:
                                       CONF.neutron.ovs_bridge)
             ovs_interfaceid = port['id']
         elif vif_type == network_model.VIF_TYPE_BRIDGE:
-            bridge = port_details.get(network_model.VIF_DETAILS_BRIDGE_NAME,
-                                      "brq" + port['network_id'])
-            should_create_bridge = True
+            # Linux bridge networking has been removed from Nova. Fail fast.
+            raise exception.NovaException(
+                "Neutron reported binding:vif_type=bridge, but Linux bridge "
+                "VIFs are no longer supported by Nova. Please migrate to a "
+                "supported backend (e.g. OVS/OVN) before upgrading.")
         elif vif_type == network_model.VIF_TYPE_DVS:
             # The name of the DVS port group will contain the neutron
             # network id
@@ -3529,16 +3531,19 @@ class API:
                                   'for port %s.', refresh_vif_id,
                                   instance=instance)
                 else:
-                    # This port is no longer associated with the instance, so
-                    # simply remove it from the nw_info cache.
-                    for index, vif in enumerate(nw_info):
+                    # This port is no longer associated with the instance in
+                    # Neutron, but the compute still needs the cached VIF
+                    # model to unplug the host-side interface when handling a
+                    # network-vif-deleted event or deleting the instance.
+                    for vif in nw_info:
                         if vif['id'] == refresh_vif_id:
                             LOG.info('Port %s from network info_cache is no '
                                      'longer associated with instance in '
-                                     'Neutron. Removing from network '
-                                     'info_cache.', refresh_vif_id,
+                                     'Neutron. Keeping it in network '
+                                     'info_cache until detach or instance '
+                                     'delete cleanup can unplug it.',
+                                     refresh_vif_id,
                                      instance=instance)
-                            del nw_info[index]
                             break
                 return nw_info
             # else there is no existing cache and we need to build it

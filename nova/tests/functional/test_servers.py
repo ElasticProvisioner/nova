@@ -844,21 +844,196 @@ class ServersTest(integrated_helpers._IntegratedTestBase):
         self._delete_server(found_server)
 
     def test_resize_server_overquota(self):
+        """Test that a resize request to exceed quota is rejected."""
+        # Set default ram quota to 512.
         self.flags(cores=1, group='quota')
         self.flags(ram=512, group='quota')
-        # Create server with default flavor, 1 core, 512 ram
+
+        # Create server with default flavor, 1 core, 512 ram.
         server = self._build_server()
         created_server = self.api.post_server({"server": server})
         created_server_id = created_server['id']
 
         self._wait_for_state_change(created_server, 'ACTIVE')
 
-        # Try to resize to flavorid 2, 1 core, 2048 ram
+        # Try to resize to flavorid 2, 1 core, 2048 ram.
+        # This should fail because 2048 - 512 = 1536 > 512 ram quota.
         post = {'resize': {'flavorRef': '2'}}
         ex = self.assertRaises(client.OpenStackApiException,
                                self.api.post_server_action,
                                created_server_id, post)
         self.assertEqual(403, ex.response.status_code)
+        msg = ('Quota exceeded for ram: Requested 1536, but already used 512 '
+               'of 512 ram')
+        self.assertIn(msg, str(ex))
+
+    def test_resize_server_overquota_multiple_users(self):
+        """Test behavior when there is more than one user in the project."""
+        # Set default ram quota to 4000.
+        self.flags(ram=4000, group='quota')
+
+        # Create server as user 'fake' with default flavor, 1 core, 512 ram.
+        server1 = self._build_server()
+        created_server1 = self.api.post_server({"server": server1})
+
+        # Project usage should now be 512.
+        # User 'fake' usage should be 512.
+        # Create server as user 'other' with flavor 1 core, 2048 ram.
+        server2 = self._build_server(flavor_id='2')
+        self.api_fixture.other_api.post_server({"server": server2})
+
+        # Project usage should now be 512 + 2048 = 2560.
+        # User 'fake' usage should still be 512.
+        # user'other' usage should be 2048.
+        # Try to create server as user 'fake' with flavor 1 core, 2048 ram.
+        # This should fail because 2560 + 2048 = 4608 > 4000 ram quota.
+        server3 = self._build_server(flavor_id='2')
+        ex = self.assertRaises(client.OpenStackApiException,
+                               self.api.post_server, {"server": server3})
+        self.assertEqual(403, ex.response.status_code)
+        msg = ('Quota exceeded for ram: Requested 2048, but already used 2560 '
+               'of 4000 ram')
+        self.assertIn(msg, str(ex))
+
+        # Project usage should still be 2560.
+        # User 'fake' usage should still be 512.
+        # User 'other' usage should still be 2048.
+        # Try to resize server1 of user 'fake' to flavorid 2, 1 core, 2048 ram.
+        # This should fail because 2560 + 2048 - 512 = 4096 > 4000 ram quota.
+        post = {'resize': {'flavorRef': '2'}}
+        ex = self.assertRaises(client.OpenStackApiException,
+                               self.api.post_server_action,
+                               created_server1['id'], post)
+        self.assertEqual(403, ex.response.status_code)
+        msg = ('Quota exceeded for ram: Requested 1536, but already used '
+               '2560 of 4000 ram')
+        self.assertIn(msg, str(ex))
+
+        # Add a user-scoped ram quota of 4000 for user 'fake'.
+        # This is intentionally set the same as the default quota because it
+        # covers a specific corner case. We need to create a situation where we
+        # will have a user-scoped quota set in the database but our request
+        # will exceed the project-scoped quota rather than a lower user-scoped
+        # quota.
+        self.admin_api.update_quota(
+            {'ram': 4000}, project_id=self.api_fixture.project_id,
+            user_id='fake')
+
+        # Project usage should still be 2560.
+        # User 'fake' usage should still be 512.
+        # User 'other' usage should still be 2048.
+        # Try to create server as user 'fake' with flavor 1 core, 2048 ram.
+        # This should fail because 2560 + 2048 = 4608 > 4000 ram quota.
+        server3 = self._build_server(flavor_id='2')
+        ex = self.assertRaises(client.OpenStackApiException,
+                               self.api.post_server, {"server": server3})
+        self.assertEqual(403, ex.response.status_code)
+        msg = ('Quota exceeded for ram: Requested 2048, but already used '
+               '2560 of 4000 ram')
+        self.assertIn(msg, str(ex))
+
+    def test_resize_server_overquota_user_quota(self):
+        """Test behavior when user-scoped quota is exceeded."""
+        # Set default ram quota to 4000
+        self.flags(ram=4000, group='quota')
+
+        # Create server as user 'fake' with default flavor, 1 core, 512 ram
+        server1 = self._build_server()
+        created_server1 = self.api.post_server({"server": server1})
+
+        # Create server as user 'other' with flavor 1 core, 2048 ram
+        server2 = self._build_server(flavor_id='2')
+        self.api_fixture.other_api.post_server({"server": server2})
+
+        # Project usage should now be 2560.
+        # Try to create server as user 'fake' with flavor 1 core, 2048 ram
+        # This should fail because 2560 + 2048 = 4608 > 4000 ram quota
+        server3 = self._build_server(flavor_id='2')
+        ex = self.assertRaises(
+            client.OpenStackApiException,
+            self.api.post_server, {"server": server3})
+        self.assertEqual(403, ex.response.status_code)
+        msg = ('Quota exceeded for ram: Requested 2048, but already used 2560 '
+               'of 4000 ram')
+        self.assertIn(msg, str(ex))
+
+        # Project usage should still be 2560.
+        # Try to resize server1 to flavorid 2, 1 core, 2048 ram
+        # This should fail because 2560 + 2048 - 512 = 4096 > 4000 ram quota
+        post = {'resize': {'flavorRef': '2'}}
+        ex = self.assertRaises(client.OpenStackApiException,
+                               self.api.post_server_action,
+                               created_server1['id'], post)
+        self.assertEqual(403, ex.response.status_code)
+        msg = ('Quota exceeded for ram: Requested 1536, but already used '
+               '2560 of 4000 ram')
+        self.assertIn(msg, str(ex))
+
+        # Add a user quota for user 'other' of 2400.
+        self.admin_api.update_quota(
+            {'ram': 2400}, project_id=self.api_fixture.project_id,
+            user_id='other')
+
+        # Project usage should still be 2560.
+        # User 'other' usage should be 2048.
+        # Try to create server as user 'other' with flavor 1 core, 512 ram
+        # This should fail because 2048 + 512 = 2560 > 2400 user ram quota
+        ex = self.assertRaises(
+            client.OpenStackApiException,
+            self.api_fixture.other_api.post_server, {"server": server1})
+        self.assertEqual(403, ex.response.status_code)
+        msg = ('Quota exceeded for ram: Requested 512, but already used 2048 '
+               'of 2400 ram')
+        self.assertIn(msg, str(ex))
+
+    def test_update_quota_user_exceeds_project(self):
+        """Test that user quota cannot be set larger than project quota."""
+        # Set the project quota for instances to 5.
+        self.admin_api.update_quota(
+            {'instances': 5},
+            project_id=self.api_fixture.project_id)
+
+        # Try to set user quota for instances to 10 which exceeds the
+        # project quota of 5. This should fail with a 400 error.
+        ex = self.assertRaises(
+            client.OpenStackApiException,
+            self.admin_api.update_quota,
+            {'instances': 10},
+            project_id=self.api_fixture.project_id,
+            user_id='fake')
+        self.assertEqual(400, ex.response.status_code)
+        self.assertIn(
+            'Quota limit 10 for instances must be less than or equal to 5',
+            str(ex))
+
+    def test_update_quota_project_below_user(self):
+        """Test that project quota cannot be set less than user quota."""
+        # Set the project quota for instances to 10.
+        self.admin_api.update_quota(
+            {'instances': 10},
+            project_id=self.api_fixture.project_id)
+
+        # Set the user quota for instances to 5.
+        self.admin_api.update_quota(
+            {'instances': 5},
+            project_id=self.api_fixture.project_id,
+            user_id='fake')
+
+        # Try to set the project quota for instances to 3, which is less
+        # than the user quota of 5. This should fail with a 400 error.
+        ex = self.assertRaises(
+            client.OpenStackApiException,
+            self.admin_api.update_quota,
+            {'instances': 3},
+            project_id=self.api_fixture.project_id)
+        self.assertEqual(400, ex.response.status_code)
+        # The minimum for a project quota is the sum of user quotas, but the
+        # error message says "already used and reserved" because the same
+        # message is used for both user and project quota validation.
+        self.assertIn(
+            'Quota limit 3 for instances must be greater than or equal '
+            'to already used and reserved 5',
+            str(ex))
 
     def test_attach_vol_maximum_disk_devices_exceeded(self):
         server = self._build_server()
@@ -2089,6 +2264,43 @@ class ServerMovingTests(integrated_helpers.ProviderUsageBaseTestCase):
                                            source_rp_uuid)
 
         self._delete_and_check_allocations(server)
+
+    def test_resize_with_private_flavor(self):
+        """Ensure a non-admin user cannot resize to a private flavor that
+        has not been granted access to their project.
+        """
+        source_hostname = self.compute1.host
+
+        server = self._boot_and_check_allocations(
+            self.flavor1, source_hostname)
+
+        # Create a private flavor and grant access to a different project.
+        private_flavor_body = {'flavor': {
+            'name': 'private_flavor',
+            'ram': 1024,
+            'vcpus': 1,
+            'disk': 10,
+            'os-flavor-access:is_public': False,
+        }}
+        private_flavor = self.admin_api.post_flavor(private_flavor_body)
+        self.admin_api.api_post(
+            'flavors/%s/action' % private_flavor['id'],
+            {'addTenantAccess': {'tenant': 'other-project'}})
+
+        # Use a non-admin API client to attempt the resize.
+        non_admin_api = self.api_fixture.api
+        non_admin_api.microversion = self.microversion
+
+        resize_req = {
+            'resize': {
+                'flavorRef': private_flavor['id']
+            }
+        }
+        ex = self.assertRaises(
+            client.OpenStackApiException,
+            non_admin_api.post_server_action,
+            server['id'], resize_req)
+        self.assertEqual(400, ex.response.status_code)
 
     def test_resize_delete_while_verify(self):
         """Test scenario where the server is deleted while in the
